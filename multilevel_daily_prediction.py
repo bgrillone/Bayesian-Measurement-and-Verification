@@ -28,6 +28,7 @@ unique_clusters = cluster.unique()
 electricity = df.total_electricity
 df["log_electricity"] = log_electricity = np.log(electricity + 0.1).values
 df['temperature_deviations'] = np.where(df['temp_dep_h'] > 0, df['temp_dep_h'], df['temp_dep_c'])
+n_hours = len(df.index)
 temperature = df.temperature
 temperature_deviation = df.temperature_deviations
 temp_dep_c = df.temp_dep_c
@@ -470,6 +471,21 @@ plt.scatter(x = df['t'], y = df['log_electricity'], label='observed')
 plt.legend(loc='upper left')
 plt.show()
 
+# TRYING TO COMPUTE HPD/HDI
+
+ypred = pm.sampling.sample_posterior_predictive(model=varying_intercept_fixed_temp,trace=varying_temp_trace, samples=500)
+y_sample_posterior_predictive = np.asarray(ypred['y'])
+sig0 = pm.hpd(y_sample_posterior_predictive)
+
+
+varying_temp_hdi = az.hdi(varying_temp_idata)
+
+varying_temp_hdi.a_cluster.sel(Cluster = 1, hdi='lower')
+plt.vlines(np.arange(n_hours), varying_temp_hdi.a_cluster.sel(Cluster = 1, hdi='lower'),
+           varying_temp_hdi.a_cluster.sel(Cluster = 1, hdi='higher'))
+plt.show()
+
+
 # At a first glance it seems that the varying intercept model is improving the estimate, by
 # moving the low consumption clusters closer to their observed value, also reducing the consumption of the most extreme clusters
 # Let's plot the posterior
@@ -688,6 +704,146 @@ plt.show()
 
 # How to interpret? Also not sure what we're actually plotting (what is the 'var_names=["a", "y"]' term? Why is it taking 'a'?)
 
+# COVARYING INTERCEPT AND 1 TEMPERATURE SLOPE
+
+coords["param"] = ["a", "b"]
+coords["param_bis"] = ["a", "b"]
+with pm.Model(coords=coords) as covariation_intercept_temp:
+    cluster_idx = pm.Data("cluster_idx", cluster, dims="obs_id")
+    temp_dev = pm.Data("temp_dev", temperature_deviation, dims="obs_id")
+
+    # prior stddev in temp slope
+    sd_dist = pm.Exponential.dist(0.5)
+
+    # get back standard deviations and rho:
+    chol, corr, stds = pm.LKJCholeskyCov("chol", n=2, eta=2.0, sd_dist=sd_dist, compute_corr=True)
+
+    # prior for average intercept:
+    a = pm.Normal("a", mu=0.0, sigma=10.0)
+    # prior for average slope:
+    b = pm.Normal("b", mu=0.0, sigma=1.0)
+
+    # population of varying effects:
+    ab_cluster = pm.MvNormal("ab_cluster", mu=tt.stack([a, b]), chol=chol, dims=("Cluster", "param"))
+
+    # Electricity prediction
+    mu = ab_cluster[cluster_idx, 0] + ab_cluster[cluster_idx, 1] * temp_dev
+    # Model error:
+    sigma = pm.Exponential("sigma", 1.0)
+
+    y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity, dims="obs_id")
+
+pm.model_to_graphviz(covariation_intercept_temp)
+
+with covariation_intercept_temp:
+    covarying_intercept_temp_trace = pm.sample(random_seed=RANDOM_SEED)
+    covarying_intercept_temp_idata = az.from_pymc3(covarying_intercept_temp_trace)
+
+az.summary(covarying_intercept_temp_idata, round_to=2)
+
+with covariation_intercept_temp:
+    ppc = pm.sample_posterior_predictive(covarying_intercept_temp_trace, random_seed=RANDOM_SEED)
+    covarying_intercept_temp_idata = az.from_pymc3(covarying_intercept_temp_trace, posterior_predictive=ppc)
+
+az.plot_trace(covarying_intercept_temp_idata)
+plt.show()
+
+# Let's try to compute predictions (actually retrodictions)
+
+covarying_int_temp_ab_means = np.mean(covarying_intercept_temp_trace['ab_cluster'], axis = 0)
+# Create array with predictions
+covarying_intercept_temp_predictions = []
+
+for day in range(0,len(df)):
+    for cluster_idx in unique_clusters:
+        if cluster[day] == cluster_idx:
+            covarying_intercept_temp_predictions.append(covarying_int_temp_ab_means[cluster_idx,0] +
+                                                        covarying_int_temp_ab_means[cluster_idx,1] * temperature_deviation[day])
+
+
+plt.scatter(x = df['t'],y = covarying_intercept_temp_predictions, label='covarying intercept temperature model')
+plt.scatter(x = df['t'], y = df['log_electricity'], label='observed')
+plt.legend(loc='upper left')
+plt.show()
+
+
+# COVARYING INTERCEPT AND 1 TEMPERATURE SLOPE (UNCENTERED)
+
+coords["param"] = ["a", "b"]
+coords["param_bis"] = ["a", "b"]
+with pm.Model(coords=coords) as covariation_intercept_temp_uc:
+    cluster_idx = pm.Data("cluster_idx", cluster, dims="obs_id")
+    temp_dev = pm.Data("temp_dev", temperature_deviation, dims="obs_id")
+
+    # prior stddev in temp slope
+    sd_dist = pm.Exponential.dist(0.5)
+
+    # get back standard deviations and rho:
+    chol, corr, stds = pm.LKJCholeskyCov("chol", n=2, eta=2.0, sd_dist=sd_dist, compute_corr=True)
+
+    # prior for average intercept:
+    a = pm.Normal("a", mu=0.0, sigma=10.0)
+    # prior for average slope:
+    b = pm.Normal("b", mu=0.0, sigma=1.0)
+    # population of varying effects:
+    z = pm.Normal("z", 0.0, 1.0, dims=("param", "Cluster"))
+    ab_cluster = pm.Deterministic("ab_cluster", tt.dot(chol, z).T, dims=("Cluster", "param"))
+
+    # Electricity prediction
+    mu = a + ab_cluster[cluster_idx, 0] + (b + ab_cluster[cluster_idx, 1]) * temp_dev
+    # Model error:
+    sigma = pm.Exponential("sigma", 1.0)
+
+    y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity, dims="obs_id")
+
+pm.model_to_graphviz(covariation_intercept_temp_uc)
+
+with covariation_intercept_temp_uc:
+    covarying_intercept_temp_uc_trace = pm.sample(2000, tune = 2000, target_accept = 0.99, random_seed=RANDOM_SEED)
+
+with covariation_intercept_temp_uc:
+    covarying_intercept_temp_uc_idata = az.from_pymc3(covarying_intercept_temp_uc_trace)
+
+az.summary(covarying_intercept_temp_uc_idata, round_to=2)
+
+az.plot_trace(covarying_intercept_temp_uc_idata)
+plt.show()
+
+az.plot_trace(
+    covarying_intercept_temp_uc_idata,
+    var_names=["~z", "~chol"],
+    lines=[("chol_corr", {}, 0.0)],
+    compact=True,
+    chain_prop={"ls": "-"},
+)
+plt.show()
+
+# How to interpret this graph?
+
+# Let's try to compute predictions (actually retrodictions)
+
+covarying_int_temp_uc_a_means = np.mean(covarying_intercept_temp_uc_trace['a'])
+covarying_int_temp_uc_b_means = np.mean(covarying_intercept_temp_uc_trace['b'])
+
+covarying_int_temp_uc_ab_means = np.mean(covarying_intercept_temp_uc_trace['ab_cluster'], axis = 0)
+# Create array with predictions
+covarying_intercept_temp_uc_predictions = []
+
+for day in range(0,len(df)):
+    for cluster_idx in unique_clusters:
+        if cluster[day] == cluster_idx:
+            covarying_intercept_temp_uc_predictions.append(covarying_int_temp_uc_a_means + covarying_int_temp_uc_ab_means[cluster_idx,0] +
+                                                           (covarying_int_temp_uc_b_means +
+                                                            covarying_int_temp_uc_ab_means[cluster_idx,1] * temperature_deviation[day]))
+
+
+plt.scatter(x = df['t'],y = covarying_intercept_temp_uc_predictions, label='covarying intercept temperature model')
+plt.scatter(x = df['t'], y = df['log_electricity'], label='observed')
+plt.legend(loc='upper left')
+plt.show()
+
+# The chains look good, except for one of the chol.
+
 # VARYING INTERCEPT, COVARYING TEMPERATURE AND GHI SLOPE
 
 coords["param"] = ["bt", "bghi"]
@@ -697,7 +853,7 @@ with pm.Model(coords=coords) as covariation_temp_GHI_slopes:
     temp_dev = pm.Data("temp_dev", temperature_deviation, dims="obs_id")
     horizontal_irradiance = pm.Data("horizontal_irradiance", GHI, dims="obs_id")
 
-    # prior stddev in temp and GHI slopes (variation across counties):
+    # prior stddev in temp and GHI slopes
     sd_dist = pm.Exponential.dist(0.5)
 
     # get back standard deviations and rho:
@@ -726,5 +882,74 @@ with pm.Model(coords=coords) as covariation_temp_GHI_slopes:
 pm.model_to_graphviz(covariation_temp_GHI_slopes)
 
 with covariation_temp_GHI_slopes:
+    covarying_temp_ghi_slopes_trace = pm.sample(random_seed=RANDOM_SEED)
+    covarying_temp_ghi_slopes_idata = az.from_pymc3(covarying_slopes_trace)
+
+az.summary(covarying_temp_ghi_slopes_idata, round_to=2)
+
+with covariation_intercept_temp:
+    ppc = pm.sample_posterior_predictive(covarying_temp_ghi_slopes_trace, random_seed=RANDOM_SEED)
+    covarying_temp_ghi_slopes_idata = az.from_pymc3(covarying_temp_ghi_slopes_trace, posterior_predictive=ppc)
+
+az.plot_trace(covarying_temp_ghi_slopes_idata)
+plt.show()
+
+# Let's try to compute predictions (actually retrodictions)
+
+covarying_int_temp_ab_means = np.mean(covarying_intercept_temp_trace['ab_county'], axis = 0)
+# Create array with predictions
+covarying_intercept_temp_predictions = []
+
+for day in range(0,len(df)):
+    for cluster_idx in unique_clusters:
+        if cluster[day] == cluster_idx:
+            covarying_intercept_temp_predictions.append(covarying_int_temp_ab_means[cluster_idx,0] +
+                                                        covarying_int_temp_ab_means[cluster_idx,1] * temperature_deviation[day])
+
+
+
+# COVARYING INTERCEPT AND 2 TEMPERATURE SLOPES
+
+coords["param"] = ["bt", "bghi"]
+coords["param_bis"] = ["bt", "bghi"]
+with pm.Model(coords=coords) as covariation_intercept_temps:
+    cluster_idx = pm.Data("cluster_idx", cluster, dims="obs_id")
+    heating_temp = pm.Data("heating_temp", temp_dep_h, dims="obs_id")
+    cooling_temp = pm.Data("cooling_temp", temp_dep_c, dims="obs_id")
+
+    # prior stddev in temp and GHI slopes (variation across counties):
+    sd_dist = pm.Exponential.dist(0.5)
+
+    # get back standard deviations and rho:
+    chol, corr, stds = pm.LKJCholeskyCov("chol", n=3, eta=2.0, sd_dist=sd_dist, compute_corr=True)
+
+    #Hyperprior for varying intercept
+    a = pm.Normal("a", mu=0.0, sigma=10.0)
+    sigma_a = pm.Exponential("sigma_a", 1.0)
+    a_cluster = pm.Normal("a_cluster", mu=a, sigma=sigma_a, dims="Cluster")
+
+    # prior for heating and cooling temp slope:
+    bh = pm.Normal("bh", mu=0.0, sigma=1.0)
+    bc = pm.Normal("bc", mu=0.0, sigma=1.0)
+
+    # population of varying effects:
+    vec = pm.MvNormal("coefs", mu=np.zeros(3), chol=chol, shape= (n_hours, 3))
+
+    # Expected value per county:
+    mu = vec[cluster_idx, 0] + vec[cluster_idx, 1] * heating_temp + vec[cluster_idx, 2] * cooling_temp
+    # Model error:
+    sigma = pm.Exponential("sigma", 1.0)
+
+    y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity, dims="obs_id")
+
+pm.model_to_graphviz(covariation_temp_GHI_slopes)
+
+with covariation_intercept_temps:
     covarying_slopes_trace = pm.sample(random_seed=RANDOM_SEED)
     covarying_slopes_idata = az.from_pymc3(covarying_slopes_trace)
+
+
+len(covarying_slopes_trace['a_cluster'][1])
+
+
+

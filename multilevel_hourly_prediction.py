@@ -57,7 +57,7 @@ with pm.Model(coords=coords) as partial_pooling:
     a_cluster = pm.Normal("a_cluster", mu=a, sigma=sigma_a, dims="Cluster_hour")
 
     # Expected value per county:
-    mu = a_cluster[cluster_idx]
+    mu = a_cluster[cluster_idx]z
     # Model error:
     sigma = pm.Exponential("sigma", 1.0)
 
