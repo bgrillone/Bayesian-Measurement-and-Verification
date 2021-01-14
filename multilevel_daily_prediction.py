@@ -139,6 +139,24 @@ plt.legend(loc='upper left')
 plt.show()
 
 # Would be good to add a HDI on the previous plot
+# Not sure if we can calculate it like this but seems like the only option at the moment
+
+pooled_hdi = az.hdi(pooled_idata)
+lower_bound_mean = pooled_hdi.a.sel(hdi = 'lower').values + pooled_hdi.bc.sel(hdi = 'lower').values * temp_dep_c + \
+              pooled_hdi.bh.sel(hdi = 'lower').values * temp_dep_h
+lower_bound = lower_bound_mean - pooled_hdi.sigma.sel(hdi = 'higher').values
+higher_bound_mean = pooled_hdi.a.sel(hdi = 'higher').values + pooled_hdi.bc.sel(hdi = 'higher').values * temp_dep_c + \
+              pooled_hdi.bh.sel(hdi = 'higher').values * temp_dep_h
+higher_bound = higher_bound_mean + pooled_hdi.sigma.sel(hdi = 'higher').values
+
+plt.scatter(x = df['t'], y = df['log_electricity'], label='observed', s = 10, zorder = 4)
+plt.plot(pooled_trace["a"].mean() + pooled_trace["bh"].mean() * temp_dep_h +
+                            pooled_trace['bc'].mean() * temp_dep_c, color = 'orangered',label='pooled model', zorder = 3)
+plt.vlines(np.arange(n_hours), lower_bound, higher_bound, color = 'bisque', label = 'Exp. distribution', zorder = 1)
+plt.vlines(np.arange(n_hours), lower_bound_mean, higher_bound_mean, color = 'darkorange', label = 'Exp. mean HPD',
+           alpha = 0.3, zorder = 2)
+plt.legend(ncol = 2)
+plt.show()
 
 # In the radon notebook the HDI they draw is grouped by 'Level' so we can't use it in this case, might need
 # to look into other notebooks to draw the HDI. It's clear that this model can't perform that well being identified
@@ -471,19 +489,7 @@ plt.scatter(x = df['t'], y = df['log_electricity'], label='observed')
 plt.legend(loc='upper left')
 plt.show()
 
-# TRYING TO COMPUTE HPD/HDI
 
-ypred = pm.sampling.sample_posterior_predictive(model=varying_intercept_fixed_temp,trace=varying_temp_trace, samples=500)
-y_sample_posterior_predictive = np.asarray(ypred['y'])
-sig0 = pm.hpd(y_sample_posterior_predictive)
-
-
-varying_temp_hdi = az.hdi(varying_temp_idata)
-
-varying_temp_hdi.a_cluster.sel(Cluster = 1, hdi='lower')
-plt.vlines(np.arange(n_hours), varying_temp_hdi.a_cluster.sel(Cluster = 1, hdi='lower'),
-           varying_temp_hdi.a_cluster.sel(Cluster = 1, hdi='higher'))
-plt.show()
 
 
 # At a first glance it seems that the varying intercept model is improving the estimate, by
@@ -572,6 +578,12 @@ varying_intercept_slope_bh = np.mean(varying_intercept_slope_trace['bh_cluster']
 varying_intercept_slope_bc = np.mean(varying_intercept_slope_trace['bc_cluster'], axis = 0)
 # Create array with predictions
 varying_intercept_slope_predictions = []
+# Create array with bounds
+varying_intercept_slope_hdi = az.hdi(varying_temp_idata)
+varying_intercept_slope_mean_lower = []
+varying_intercept_slope_mean_higher= []
+varying_intercept_slope_lower = []
+varying_intercept_slope_higher= []
 
 for day in range(0,len(df)):
     for cluster_idx in unique_clusters:
@@ -579,6 +591,29 @@ for day in range(0,len(df)):
             varying_intercept_slope_predictions.append(cluster_varying_intercept_slope_means[cluster_idx] +
                                                        varying_intercept_slope_bh[cluster_idx] * temp_dep_h[day] +
                                                        varying_intercept_slope_bc[cluster_idx] * temp_dep_c[day])
+
+            varying_intercept_slope_mean_lower.append(varying_intercept_slope_hdi['a_cluster'][cluster_idx].sel(hdi = 'lower') +
+                                                       varying_intercept_slope_hdi['bh_cluster'][cluster_idx].sel(
+                                                           hdi='lower') * temp_dep_h[day] +
+                                                       varying_intercept_slope_hdi['bc_cluster'][cluster_idx].sel(
+                                                           hdi='lower') * temp_dep_c[day])
+
+            varying_intercept_slope_mean_higher.append(varying_intercept_slope_hdi['a_cluster'][cluster_idx].sel(hdi = 'higher') +
+                                                       varying_intercept_slope_hdi['bh_cluster'][cluster_idx].sel(
+                                                           hdi='higher') * temp_dep_h[day] +
+                                                       varying_intercept_slope_hdi['bc_cluster'][cluster_idx].sel(
+                                                           hdi='higher') * temp_dep_c[day])
+
+            varying_intercept_slope_lower.append( varying_intercept_slope_hdi['a_cluster'][cluster_idx].sel(hdi='lower') +
+                varying_intercept_slope_hdi['bh_cluster'][cluster_idx].sel(hdi='lower') * temp_dep_h[day] +
+                varying_intercept_slope_hdi['bc_cluster'][cluster_idx].sel(hdi='lower') * temp_dep_c[day] -
+                                                  varying_intercept_slope_hdi['sigma'].sel(hdi='higher'))
+
+
+            varying_intercept_slope_higher.append( varying_intercept_slope_hdi['a_cluster'][cluster_idx].sel(hdi='higher') +
+                varying_intercept_slope_hdi['bh_cluster'][cluster_idx].sel(hdi='higher') * temp_dep_h[day] +
+                varying_intercept_slope_hdi['bc_cluster'][cluster_idx].sel(hdi='higher') * temp_dep_c[day]+
+                                                  varying_intercept_slope_hdi['sigma'].sel(hdi='higher'))
 
 plt.scatter(x = df['t'],y = varying_intercept_slope_predictions, label='varying intercept temp model')
 plt.scatter(x = df['t'], y = df['log_electricity'], label='observed')
@@ -597,6 +632,17 @@ az.plot_ppc(az.from_pymc3(posterior_predictive=ppc, model=varying_intercept_and_
 plt.show()
 
 # How to interpret? Also not sure what we're actually plotting (what is the 'var_names=["a", "y"]' term? Why is it taking 'a'?)
+
+# Plot HDI
+plt.scatter(x = df[0:365]['t'], y = df[0:365]['log_electricity'], label='Observed', s = 10, zorder = 4)
+plt.scatter(x = df[0:365]['t'], y = varying_intercept_slope_predictions[0:365], color = 'orangered',
+            label='Varying intercept and slope model', zorder = 3, s = 14)
+vlines = plt.vlines(np.arange(365), varying_intercept_slope_mean_lower[0:365], varying_intercept_slope_mean_higher[0:365],
+                    color='darkorange', label='Exp. distribution', zorder=2)
+vlines = plt.vlines(np.arange(365), varying_intercept_slope_lower[0:365], varying_intercept_slope_higher[0:365],
+                    color='bisque', label='Exp. mean HPD', zorder=1)
+plt.legend(ncol = 2)
+plt.show()
 
 
 # VARYING INTERCEPT, TEMPERATURE AND GHI SLOPE
