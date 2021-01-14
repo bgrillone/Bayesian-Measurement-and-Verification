@@ -620,6 +620,17 @@ plt.scatter(x = df['t'], y = df['log_electricity'], label='observed')
 plt.legend(loc='upper left')
 plt.show()
 
+# Plot HDI
+plt.scatter(x = df[0:365]['t'], y = df[0:365]['log_electricity'], label='Observed', s = 10, zorder = 4)
+plt.scatter(x = df[0:365]['t'], y = varying_intercept_slope_predictions[0:365], color = 'orangered',
+            label='Varying intercept and slope model', zorder = 3, s = 14)
+vlines = plt.vlines(np.arange(365), varying_intercept_slope_mean_lower[0:365], varying_intercept_slope_mean_higher[0:365],
+                    color='darkorange', label='Exp. distribution', zorder=2)
+vlines = plt.vlines(np.arange(365), varying_intercept_slope_lower[0:365], varying_intercept_slope_higher[0:365],
+                    color='bisque', label='Exp. mean HPD', zorder=1)
+plt.legend(ncol = 2)
+plt.show()
+
 # Let's plot the posterior
 with varying_intercept_and_temp:
     ppc = pm.sample_posterior_predictive(
@@ -632,18 +643,6 @@ az.plot_ppc(az.from_pymc3(posterior_predictive=ppc, model=varying_intercept_and_
 plt.show()
 
 # How to interpret? Also not sure what we're actually plotting (what is the 'var_names=["a", "y"]' term? Why is it taking 'a'?)
-
-# Plot HDI
-plt.scatter(x = df[0:365]['t'], y = df[0:365]['log_electricity'], label='Observed', s = 10, zorder = 4)
-plt.scatter(x = df[0:365]['t'], y = varying_intercept_slope_predictions[0:365], color = 'orangered',
-            label='Varying intercept and slope model', zorder = 3, s = 14)
-vlines = plt.vlines(np.arange(365), varying_intercept_slope_mean_lower[0:365], varying_intercept_slope_mean_higher[0:365],
-                    color='darkorange', label='Exp. distribution', zorder=2)
-vlines = plt.vlines(np.arange(365), varying_intercept_slope_lower[0:365], varying_intercept_slope_higher[0:365],
-                    color='bisque', label='Exp. mean HPD', zorder=1)
-plt.legend(ncol = 2)
-plt.show()
-
 
 # VARYING INTERCEPT, TEMPERATURE AND GHI SLOPE
 
