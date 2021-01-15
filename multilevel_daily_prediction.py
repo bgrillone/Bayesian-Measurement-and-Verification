@@ -28,7 +28,9 @@ unique_clusters = cluster.unique()
 electricity = df.total_electricity
 df["log_electricity"] = log_electricity = np.log(electricity + 0.1).values
 df['temperature_deviations'] = np.where(df['temp_dep_h'] > 0, df['temp_dep_h'], df['temp_dep_c'])
+df['t'] = pd.to_datetime(df['t'], format= '%Y-%m-%d')
 n_hours = len(df.index)
+n_clusters = len(unique_clusters)
 temperature = df.temperature
 temperature_deviation = df.temperature_deviations
 temp_dep_c = df.temp_dep_c
@@ -955,46 +957,116 @@ for day in range(0,len(df)):
 
 # COVARYING INTERCEPT AND 2 TEMPERATURE SLOPES
 
-coords["param"] = ["bt", "bghi"]
-coords["param_bis"] = ["bt", "bghi"]
-with pm.Model(coords=coords) as covariation_intercept_temps:
+with pm.Model(coords=coords) as covarying_intercept_and_temp:
+
     cluster_idx = pm.Data("cluster_idx", cluster, dims="obs_id")
     heating_temp = pm.Data("heating_temp", temp_dep_h, dims="obs_id")
     cooling_temp = pm.Data("cooling_temp", temp_dep_c, dims="obs_id")
 
-    # prior stddev in temp and GHI slopes (variation across counties):
-    sd_dist = pm.Exponential.dist(0.5)
-
-    # get back standard deviations and rho:
-    chol, corr, stds = pm.LKJCholeskyCov("chol", n=3, eta=2.0, sd_dist=sd_dist, compute_corr=True)
-
-    #Hyperprior for varying intercept
+   # Hyperpriors:
     a = pm.Normal("a", mu=0.0, sigma=10.0)
-    sigma_a = pm.Exponential("sigma_a", 1.0)
-    a_cluster = pm.Normal("a_cluster", mu=a, sigma=sigma_a, dims="Cluster")
-
-    # prior for heating and cooling temp slope:
     bh = pm.Normal("bh", mu=0.0, sigma=1.0)
     bc = pm.Normal("bc", mu=0.0, sigma=1.0)
 
-    # population of varying effects:
-    vec = pm.MvNormal("coefs", mu=np.zeros(3), chol=chol, shape= (n_hours, 3))
+    sd_dist = pm.Exponential.dist(0.5)
 
-    # Expected value per county:
-    mu = vec[cluster_idx, 0] + vec[cluster_idx, 1] * heating_temp + vec[cluster_idx, 2] * cooling_temp
-    # Model error:
+    chol, corr, stds = pm.LKJCholeskyCov("chol", n=3, eta=2.0, sd_dist=sd_dist, compute_corr=True)
+
+   # Correlated varying intercept and slopes within clusters
+   # Note that I don't really know how to use the dims argument, but you could replace
+   # the shape bit with something using that I'm sure.
+    coefs = pm.MvNormal("coefficients", mu=tt.stack([a, bh, bc]), chol=chol, shape=(n_clusters, 3))
+
+   # You can now pick out the a, bh and bc if you like and they should be correlated within clusters
+    a_cluster = coefs[:, 0]
+    bh_cluster = coefs[:, 1]
+    bc_cluster = coefs[:, 2]
+
+   # Electricity prediction
+    mu = a_cluster[cluster_idx] + bh_cluster[cluster_idx] * heating_temp + bc_cluster[cluster_idx] * cooling_temp
+
+   # Model error:
     sigma = pm.Exponential("sigma", 1.0)
-
     y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity, dims="obs_id")
 
-pm.model_to_graphviz(covariation_temp_GHI_slopes)
+pm.model_to_graphviz(covarying_intercept_and_temp)
 
-with covariation_intercept_temps:
-    covarying_slopes_trace = pm.sample(random_seed=RANDOM_SEED)
+with covarying_intercept_and_temp:
+    covarying_slopes_trace = pm.sample(2000, tune = 2000, target_accept = 0.99, random_seed=RANDOM_SEED)
+with covarying_intercept_and_temp:
     covarying_slopes_idata = az.from_pymc3(covarying_slopes_trace)
 
+az.summary(covarying_slopes_idata)
 
-len(covarying_slopes_trace['a_cluster'][1])
+# Let's try to compute predictions (actually retrodictions)
+
+covarying_coefficients_means = np.mean(covarying_slopes_trace['coefficients'], axis = 0)
+# Create array with predictions
+covarying_slopes_predictions = []
+
+for day in range(0,len(df)):
+    for cluster_idx in unique_clusters:
+        if cluster[day] == cluster_idx:
+            covarying_slopes_predictions.append(covarying_coefficients_means[cluster_idx,0] +
+                                                        covarying_coefficients_means[cluster_idx,1] * temp_dep_h[day] +
+                                                        covarying_coefficients_means[cluster_idx, 2] * temp_dep_c[day])
+
+plt.scatter(x = df['t'],y = covarying_slopes_predictions, label='covarying slopes model')
+plt.scatter(x = df['t'], y = df['log_electricity'], label='observed')
+plt.legend(loc='upper left')
+plt.show()
+
+covarying_slopes_hdi = az.hdi(covarying_slopes_idata)
+covarying_slopes_predictions = []
+covarying_slopes_mean_lower = []
+covarying_slopes_mean_higher= []
+covarying_slopes_lower = []
+covarying_slopes_higher= []
+
+for day in range(0,len(df)):
+    for cluster_idx in unique_clusters:
+        if cluster[day] == cluster_idx:
+            covarying_slopes_predictions.append(covarying_coefficients_means[cluster_idx,0] +
+                                                        covarying_coefficients_means[cluster_idx,1] * temp_dep_h[day] +
+                                                        covarying_coefficients_means[cluster_idx, 2] * temp_dep_c[day])
+
+            covarying_slopes_mean_lower.append(covarying_slopes_hdi['coefficients'][cluster_idx][0].sel(hdi = 'lower') +
+                                                      covarying_slopes_hdi['coefficients'][cluster_idx][1].sel(hdi='lower') *
+                                                      temp_dep_h[day] +
+                                                      covarying_slopes_hdi['coefficients'][cluster_idx][2].sel(
+                                                          hdi='lower') * temp_dep_c[day])
+
+            covarying_slopes_mean_higher.append(covarying_slopes_hdi['coefficients'][cluster_idx][0].sel(hdi = 'higher') +
+                                                      covarying_slopes_hdi['coefficients'][cluster_idx][1].sel(hdi='higher') *
+                                                      temp_dep_h[day] +
+                                                      covarying_slopes_hdi['coefficients'][cluster_idx][2].sel(
+                                                          hdi='higher') * temp_dep_c[day])
+
+            covarying_slopes_lower.append(covarying_slopes_hdi['coefficients'][cluster_idx][0].sel(hdi = 'lower') +
+                                           covarying_slopes_hdi['coefficients'][cluster_idx][1].sel(hdi='lower') *
+                                           temp_dep_h[day] +
+                                           covarying_slopes_hdi['coefficients'][cluster_idx][2].sel(hdi='lower') *
+                                           temp_dep_c[day] -
+                                           covarying_slopes_hdi['sigma'].sel(hdi='higher'))
+
+            covarying_slopes_higher.append(covarying_slopes_hdi['coefficients'][cluster_idx][0].sel(hdi = 'higher') +
+                                           covarying_slopes_hdi['coefficients'][cluster_idx][1].sel(hdi='higher') *
+                                           temp_dep_h[day] +
+                                           covarying_slopes_hdi['coefficients'][cluster_idx][2].sel(hdi='higher') *
+                                           temp_dep_c[day]+
+                                           covarying_slopes_hdi['sigma'].sel(hdi='higher'))
+
+
+# Plot HDI
+plt.scatter(x = df[0:365]['t'], y = df[0:365]['log_electricity'], label='Observed', s = 10, zorder = 4)
+plt.scatter(x = df[0:365]['t'], y = covarying_slopes_predictions[0:365], color = 'orangered',
+            label='Varying intercept and slope model', zorder = 3, s = 14)
+vlines = plt.vlines(df[0:365]['t'], covarying_slopes_mean_lower[0:365], covarying_slopes_mean_higher[0:365],
+                    color='darkorange', label='Exp. distribution', zorder=2)
+vlines = plt.vlines(df[0:365]['t'], covarying_slopes_lower[0:365], covarying_slopes_higher[0:365],
+                    color='bisque', label='Exp. mean HPD', zorder=1)
+plt.legend(ncol = 2)
+plt.show()
 
 
 
