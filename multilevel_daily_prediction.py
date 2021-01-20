@@ -47,6 +47,7 @@ cons_plt = df.total_electricity.hist(bins = 25)
 cons_plt.set_xlabel('consumption (kWh)')
 plt.show()
 
+plt
 # The variable that we're trying to model is clearly not normal, let's see if within each cluster
 # consumption is actually normally distributed:
 
@@ -1059,16 +1060,134 @@ vlines = plt.vlines(df[0:365]['t'], covarying_slopes_lower[0:365], covarying_slo
 plt.legend(ncol = 2)
 plt.show()
 
+# COVARYING INTERCEPT TEMPERATURE AND GHI
 
-# Let's run model comparison
+with pm.Model(coords=coords) as covarying_intercept_temp_ghi:
+
+    cluster_idx = pm.Data("cluster_idx", cluster, dims="obs_id")
+    heating_temp = pm.Data("heating_temp", temp_dep_h, dims="obs_id")
+    cooling_temp = pm.Data("cooling_temp", temp_dep_c, dims="obs_id")
+    horizontal_irradiance = pm.Data("horizontal_irradiance", GHI, dims = "obs_id")
+
+   # Hyperpriors:
+    a = pm.Normal("a", mu=0.0, sigma=10.0)
+    bh = pm.Normal("bh", mu=0.0, sigma=1.0)
+    bc = pm.Normal("bc", mu=0.0, sigma=1.0)
+    bghi = pm.Normal("bghi", mu=0.0, sigma=1.0)
+
+    sd_dist = pm.Exponential.dist(0.5)
+
+    chol, corr, stds = pm.LKJCholeskyCov("chol", n=4, eta=2.0, sd_dist=sd_dist, compute_corr=True)
+
+   # Correlated varying intercept and slopes within clusters
+   # Note that I don't really know how to use the dims argument, but you could replace
+   # the shape bit with something using that I'm sure.
+    coefs = pm.MvNormal("coefficients", mu=tt.stack([a, bh, bc, bghi]), chol=chol, shape=(n_clusters, 4))
+
+   # You can now pick out the a, bh and bc if you like and they should be correlated within clusters
+    a_cluster = coefs[:, 0]
+    bh_cluster = coefs[:, 1]
+    bc_cluster = coefs[:, 2]
+    bghi_cluster = coefs[:, 3]
+
+   # Electricity prediction
+    mu = a_cluster[cluster_idx] + bh_cluster[cluster_idx] * heating_temp + bc_cluster[cluster_idx] * cooling_temp + \
+         bghi_cluster[cluster_idx] * horizontal_irradiance
+
+   # Model error:
+    sigma = pm.Exponential("sigma", 1.0)
+    y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity, dims="obs_id")
+
+
+with covarying_intercept_temp_ghi:
+    covarying_slopes_ghi_trace = pm.sample(2000, tune = 2000, target_accept = 0.99, random_seed=RANDOM_SEED, cores=4)
+with covarying_intercept_temp_ghi:
+    covarying_slopes_ghi_idata = az.from_pymc3(covarying_slopes_ghi_trace)
+
+
+az.summary(covarying_slopes_ghi_idata)
+az.plot_trace(covarying_slopes_ghi_idata)
+plt.show()
+
+# Let's try to compute predictions (actually retrodictions)
+
+covarying_coefficients_ghi_means = np.mean(covarying_slopes_ghi_trace['coefficients'], axis = 0)
+# Create array with predictions
+
+covarying_slopes_ghi_hdi = az.hdi(covarying_slopes_ghi_idata)
+covarying_slopes_ghi_predictions = []
+covarying_slopes_ghi_mean_lower = []
+covarying_slopes_ghi_mean_higher= []
+covarying_slopes_ghi_lower = []
+covarying_slopes_ghi_higher= []
+
+for day in range(0,len(df)):
+    for cluster_idx in unique_clusters:
+        if cluster[day] == cluster_idx:
+            covarying_slopes_ghi_predictions.append(covarying_coefficients_ghi_means[cluster_idx,0] +
+                                                    covarying_coefficients_ghi_means[cluster_idx,1] * temp_dep_h[day] +
+                                                    covarying_coefficients_ghi_means[cluster_idx, 2] * temp_dep_c[day] +
+                                                    covarying_coefficients_ghi_means[cluster_idx, 3] * GHI[day])
+
+            covarying_slopes_ghi_mean_lower.append(covarying_slopes_ghi_hdi['coefficients'][cluster_idx][0].sel(hdi = 'lower') +
+                                                      covarying_slopes_ghi_hdi['coefficients'][cluster_idx][1].sel(hdi='lower') *
+                                                      temp_dep_h[day] +
+                                                      covarying_slopes_ghi_hdi['coefficients'][cluster_idx][2].sel(
+                                                          hdi='lower') * temp_dep_c[day] +
+                                                   covarying_slopes_ghi_hdi['coefficients'][cluster_idx][3].sel(
+                                                       hdi='lower') * GHI[day]
+                                                   )
+
+            covarying_slopes_ghi_mean_higher.append(covarying_slopes_ghi_hdi['coefficients'][cluster_idx][0].sel(hdi = 'higher') +
+                                                      covarying_slopes_ghi_hdi['coefficients'][cluster_idx][1].sel(hdi='higher') *
+                                                      temp_dep_h[day] +
+                                                      covarying_slopes_ghi_hdi['coefficients'][cluster_idx][2].sel(
+                                                          hdi='higher') * temp_dep_c[day]+
+                                                   covarying_slopes_ghi_hdi['coefficients'][cluster_idx][3].sel(
+                                                       hdi='higher') * GHI[day]
+                                                   )
+
+            covarying_slopes_ghi_lower.append(covarying_slopes_ghi_hdi['coefficients'][cluster_idx][0].sel(hdi = 'lower') +
+                                           covarying_slopes_ghi_hdi['coefficients'][cluster_idx][1].sel(hdi='lower') *
+                                           temp_dep_h[day] +
+                                           covarying_slopes_ghi_hdi['coefficients'][cluster_idx][2].sel(hdi='lower') *
+                                           temp_dep_c[day] + covarying_slopes_ghi_hdi['coefficients'][cluster_idx][3].sel(hdi='lower') *
+                                           GHI[day] - covarying_slopes_ghi_hdi['sigma'].sel(hdi='higher'))
+
+            covarying_slopes_ghi_higher.append(covarying_slopes_ghi_hdi['coefficients'][cluster_idx][0].sel(hdi = 'higher') +
+                                           covarying_slopes_ghi_hdi['coefficients'][cluster_idx][1].sel(hdi='higher') *
+                                           temp_dep_h[day] +
+                                           covarying_slopes_ghi_hdi['coefficients'][cluster_idx][2].sel(hdi='higher') *
+                                           temp_dep_c[day]+
+                                           covarying_slopes_ghi_hdi['coefficients'][cluster_idx][3].sel(hdi='higher') *
+                                           GHI[day] +
+                                           covarying_slopes_ghi_hdi['sigma'].sel(hdi='higher'))
+
+
+# Plot HDI
+plt.scatter(x = df[0:365]['t'], y = df[0:365]['log_electricity'], label='Observed', s = 10, zorder = 4)
+plt.scatter(x = df[0:365]['t'], y = covarying_slopes_ghi_predictions[0:365], color = 'orangered',
+            label='Covarying intercept temp GHI slopes model', zorder = 3, s = 14)
+vlines = plt.vlines(df[0:365]['t'], covarying_slopes_ghi_mean_lower[0:365], covarying_slopes_ghi_mean_higher[0:365],
+                    color='darkorange', label='Exp. mean HPD', zorder=2)
+vlines = plt.vlines(df[0:365]['t'], covarying_slopes_ghi_lower[0:365], covarying_slopes_ghi_higher[0:365],
+                    color='bisque', label='Exp. distribution', zorder=1)
+plt.legend(ncol = 2)
+plt.show()
+
+
+
+# Let's run model comparison (leave one out cross validation)
 df_comp_loo = az.compare({ "M1": pooled_trace, "M2":unpooled_trace, "M3": unpooled_temp_trace,
                            "M4": varying_intercept_trace, "M5":varying_temp_trace,
                            "M6":varying_intercept_slope_trace,
                            "M7": varying_intercept_temp_GHI_trace,
-                           "M8": covarying_slopes_trace})
+                           "M8": covarying_slopes_trace,
+                           "M9":covarying_slopes_ghi_trace})
 
 #Pooled M1, Unpooled M2, Unpooled + temp M3, varying intercept M4, varying int + fix slope M5,
-# varying int + varying temp slopes M6, varying intercept + varying temp and GHI slopes M7, covarying temp slopes M8
+# varying int + varying temp slopes M6, varying intercept + varying temp and GHI slopes M7, covarying temp slopes M8,
+# covarying temp ghi slopes M9
 
 df_comp_loo
 az.plot_compare(df_comp_loo, insample_dev=False)
