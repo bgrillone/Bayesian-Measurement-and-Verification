@@ -40,9 +40,11 @@ coords = {"obs_id": np.arange(temperature.size)}
 coords["Cluster"] = unique_clusters
 
 # Distribution of electricity levels (log scale):
-df.log_electricity.hist(bins=25);
+log_cons_plt = df.log_electricity.hist(bins=25)
+log_cons_plt.set_xlabel('log consumption')
 plt.show()
-df.total_electricity.hist(bins = 25)
+cons_plt = df.total_electricity.hist(bins = 25)
+cons_plt.set_xlabel('consumption (kWh)')
 plt.show()
 
 # The variable that we're trying to model is clearly not normal, let's see if within each cluster
@@ -992,29 +994,18 @@ with pm.Model(coords=coords) as covarying_intercept_and_temp:
 pm.model_to_graphviz(covarying_intercept_and_temp)
 
 with covarying_intercept_and_temp:
-    covarying_slopes_trace = pm.sample(2000, tune = 2000, target_accept = 0.99, random_seed=RANDOM_SEED)
+    covarying_slopes_trace = pm.sample(2000, tune = 2000, target_accept = 0.99, random_seed=RANDOM_SEED, cores=4)
 with covarying_intercept_and_temp:
     covarying_slopes_idata = az.from_pymc3(covarying_slopes_trace)
 
 az.summary(covarying_slopes_idata)
+az.plot_trace(covarying_slopes_idata)
+plt.show()
 
 # Let's try to compute predictions (actually retrodictions)
 
 covarying_coefficients_means = np.mean(covarying_slopes_trace['coefficients'], axis = 0)
 # Create array with predictions
-covarying_slopes_predictions = []
-
-for day in range(0,len(df)):
-    for cluster_idx in unique_clusters:
-        if cluster[day] == cluster_idx:
-            covarying_slopes_predictions.append(covarying_coefficients_means[cluster_idx,0] +
-                                                        covarying_coefficients_means[cluster_idx,1] * temp_dep_h[day] +
-                                                        covarying_coefficients_means[cluster_idx, 2] * temp_dep_c[day])
-
-plt.scatter(x = df['t'],y = covarying_slopes_predictions, label='covarying slopes model')
-plt.scatter(x = df['t'], y = df['log_electricity'], label='observed')
-plt.legend(loc='upper left')
-plt.show()
 
 covarying_slopes_hdi = az.hdi(covarying_slopes_idata)
 covarying_slopes_predictions = []
@@ -1069,4 +1060,16 @@ plt.legend(ncol = 2)
 plt.show()
 
 
+# Let's run model comparison
+df_comp_loo = az.compare({ "M1": pooled_trace, "M2":unpooled_trace, "M3": unpooled_temp_trace,
+                           "M4": varying_intercept_trace, "M5":varying_temp_trace,
+                           "M6":varying_intercept_slope_trace,
+                           "M7": varying_intercept_temp_GHI_trace,
+                           "M8": covarying_slopes_trace})
 
+#Pooled M1, Unpooled M2, Unpooled + temp M3, varying intercept M4, varying int + fix slope M5,
+# varying int + varying temp slopes M6, varying intercept + varying temp and GHI slopes M7, covarying temp slopes M8
+
+df_comp_loo
+az.plot_compare(df_comp_loo, insample_dev=False)
+plt.show()
