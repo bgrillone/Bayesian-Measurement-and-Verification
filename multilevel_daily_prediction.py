@@ -47,7 +47,6 @@ cons_plt = df.total_electricity.hist(bins = 25)
 cons_plt.set_xlabel('consumption (kWh)')
 plt.show()
 
-plt
 # The variable that we're trying to model is clearly not normal, let's see if within each cluster
 # consumption is actually normally distributed:
 
@@ -1192,3 +1191,4 @@ df_comp_loo = az.compare({ "M1": pooled_trace, "M2":unpooled_trace, "M3": unpool
 df_comp_loo
 az.plot_compare(df_comp_loo, insample_dev=False)
 plt.show()
+
