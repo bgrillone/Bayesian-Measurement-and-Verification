@@ -1,4 +1,4 @@
-import arviz as az
+import arviz  as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -13,7 +13,8 @@ df = pd.read_csv("/Users/beegroup/Github/Bayes-M&V/data/hourly_multilevel_office
 # Finally, create local copies of variables.
 
 RANDOM_SEED = 8924
-
+#Select training data subset
+df = df[df.m == 0]
 # It might be that the model can not work properly if the cluster index variable does not start from zero
 df.cluster = df.cluster -1
 df.cluster_hour = df.cluster_hour -1
@@ -38,7 +39,19 @@ coords["Cluster_hour"] = unique_cluster_hour
 electricity = df.total_electricity
 df["log_electricity"] = log_electricity = np.log(electricity + 0.1).values
 
-# Distribution of electricity levels (log scale):
+# Distribution of electricity levels (linear and log scale):
+df.total_electricity.hist(bins = 25)
+plt.show()
+
+# Let's exclude the flat cluster to see if we have something closer to a normal distribution of value
+# The problem is that even if we exclude the flat clusters, we still have all the night hours of the non-flat clusters
+# If we want the data to look normal we should exclude those as well (totally hardcoded for now)
+df_noflat = df[(df.cluster != 6) & (df.total_electricity >10)]
+df_noflat.total_electricity.hist(bins = 25)
+plt.show()
+
+plt.scatter(df_noflat.t, df_noflat.total_electricity, c = df_noflat.cluster)
+
 df.log_electricity.hist(bins=25);
 plt.show()
 
