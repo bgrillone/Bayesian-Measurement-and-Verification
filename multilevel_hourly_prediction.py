@@ -6,7 +6,7 @@ import pymc3 as pm
 import xarray as xr
 import warnings
 
-df = pd.read_csv("/Users/beegroup/Github/Bayes-M&V/data/hourly_multilevel_office.csv")
+df = pd.read_csv("/Users/beegroup/Github/Bayes-M&V/data/hourly_multilevel_office.csv.csv")
 
 # Let's follow the radon notebook and implement step by step the different models
 
@@ -45,23 +45,14 @@ plt.show()
 
 # Let's exclude the flat cluster to see if we have something closer to a normal distribution of value
 # The problem is that even if we exclude the flat clusters, we still have all the night hours of the non-flat clusters
-# If we want the data to look normal we should exclude those as well (totally hardcoded for now)
-df_noflat = df[(df.cluster != 6) & (df.total_electricity >10)]
+# If we want the data to look normal we should exclude those as well (would it make sense?)
+
+df_noflat = df[(df.cluster != 6)]
 df_noflat.total_electricity.hist(bins = 25)
+df_noflat.log_electricity.hist(bins = 25)
 plt.show()
-
-plt.scatter(df_noflat.t, df_noflat.total_electricity, c = df_noflat.cluster)
-
-df.log_electricity.hist(bins=25);
-plt.show()
-
-# Neither the data, nor it's log looks in any way similar to normal (on hourly level at least)
-# Is this going to be a problem?
-
-# DAILY PARTIAL POOLING MODEL 1: varying intercept by cluster + fixed slope for temperature
 
 # HOURLY PARTIAL POOLING MODEL
-
 
 with pm.Model(coords=coords) as partial_pooling:
     cluster_hour_idx = pm.Data("cluster_hour_idx", cluster_hour, dims="obs_id")
