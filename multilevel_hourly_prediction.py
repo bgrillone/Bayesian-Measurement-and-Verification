@@ -6,7 +6,7 @@ import pymc3 as pm
 import xarray as xr
 import warnings
 
-df = pd.read_csv("/Users/beegroup/Github/Bayes-M&V/data/hourly_multilevel_office.csv.csv")
+df = pd.read_csv("/Users/beegroup/Github/Bayes-M&V/data/hourly_multilevel_office.csv")
 
 # Let's follow the radon notebook and implement step by step the different models
 
