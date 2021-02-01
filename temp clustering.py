@@ -2,11 +2,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import matplotlib.cm as cm
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score, silhouette_samples
+from bokeh.layouts import gridplot
+from bokeh.plotting import figure, output_file, show
 from sklearn import mixture
+from sklearn.metrics import silhouette_score, silhouette_samples
 
-df = pd.read_csv("/Users/beegroup/Github/Bayes-M&V/data/daily_multilevel_office.csv")
+df = pd.read_csv("/Users/beegroup/Github/Bayes-M&V/data/Id50_preprocessed.csv")
 
 # steps of this algorithm
 # instead of excluding the days from the flat cluster, we should exclude the days with no temperature
@@ -16,20 +17,24 @@ df = pd.read_csv("/Users/beegroup/Github/Bayes-M&V/data/daily_multilevel_office.
 # Plot clusters and contour plots
 # Assign points to clusters
 
-#Exclude flat days (hardcoded)
-df_noflat = df[df.cluster != 6]
+df_heat = df[df.outdoor_temp_h >0].filter(['outdoor_temp_h', 'total_electricity'], axis = 1)
+df_cool = df[df.outdoor_temp_c >0].filter(['outdoor_temp_c', 'total_electricity'], axis = 1)
 
-plt.scatter(x = df.temp_dep_h,y = df.total_electricity)
-plt.show()
+#plot temperature dependence
+#Cons vs temp
+p1 = figure(plot_width=800, plot_height=400)
+p2 = figure(plot_width=800, plot_height=400)
+# add a circle renderer with a size, color, and alpha
+p1.circle(df_heat.outdoor_temp_h, df_heat.total_electricity, size=5, color="navy", alpha=0.5)
+p2.circle(df_cool.outdoor_temp_c, df_cool.total_electricity, size=5, color="navy", alpha=0.5)
+# show the results
+show(gridplot([p1,p2], ncols = 2))
 
-plt.scatter(x = df.temp_dep_c,y = df.total_electricity)
-plt.show()
-
-df_heat = df_noflat[df_noflat.temp_dep_h >0].filter(['temp_dep_h', 'total_electricity'], axis = 1)
-df_cool = df_noflat[df_noflat.temp_dep_c >0].filter(['temp_dep_c', 'total_electricity'], axis = 1)
+# There's two pretty clear temperature dependence clusters for both heating and cooling
+# How can we detect them automatically? Clustering or quantile regression? Let's try both approaches
 
 #Gaussian mixture model
-range_n_clusters = [2,3,4,5]
+range_n_clusters = [2,3,4]
 
 #heating case
 for n_clusters in range_n_clusters:
@@ -92,7 +97,7 @@ for n_clusters in range_n_clusters:
 
         # 2nd Plot showing the actual clusters formed
         colors = cm.nipy_spectral(cluster_labels.astype(float) / n_clusters)
-        ax2.scatter(df_heat['temp_dep_h'],df_heat['total_electricity'], marker='.', s=30, lw=0, alpha=0.7,
+        ax2.scatter(df_heat['outdoor_temp_h'],df_heat['total_electricity'], marker='.', s=30, lw=0, alpha=0.7,
                     c=colors, edgecolor='k')
 
         ax2.set_title("The visualization of the clustered data.")
@@ -131,7 +136,7 @@ for n_clusters in range_n_clusters:
     print("For n_clusters =", n_clusters,
           "The average silhouette_score is :", silhouette_avg)
 
-    sample_silhouette_values = silhouette_samples(df_heat, cluster_labels)
+    sample_silhouette_values = silhouette_samples(df_cool, cluster_labels)
 
     y_lower  = 10
     for i in range(n_clusters):
@@ -168,7 +173,7 @@ for n_clusters in range_n_clusters:
 
         # 2nd Plot showing the actual clusters formed
         colors = cm.nipy_spectral(cluster_labels.astype(float) / n_clusters)
-        ax2.scatter(df_heat['temp_dep_c'],df_heat['total_electricity'], marker='.', s=30, lw=0, alpha=0.7,
+        ax2.scatter(df_cool['outdoor_temp_c'],df_cool['total_electricity'], marker='.', s=30, lw=0, alpha=0.7,
                     c=colors, edgecolor='k')
 
         ax2.set_title("The visualization of the clustered data.")
@@ -180,13 +185,25 @@ for n_clusters in range_n_clusters:
                      fontsize=14, fontweight='bold')
     plt.show()
 
-    # Plot contours
-X, Y = np.meshgrid(np.linspace(5, 20), np.linspace(250,800))
-XX = np.array([X.ravel(), Y.ravel()]).T
-Z = gmm.score_samples(XX)
-Z = Z.reshape((50,50))
+# Clustering seems to work pretty well in this case, the highest silhouette score is assigned to the case
+# with 2 clusters. The problem when the number of clusters rises is that we only want to actually cluster along one
+# direction. For this reason doing quantile regression may make more sense than GMM clustering
 
-plt.contour(X, Y, Z)
-plt.scatter(df_cool['temp_dep_c'], df_cool['total_electricity'])
+#Get a df with the point classification (hardcoded)
 
-plt.show()
+gmm = mixture.GaussianMixture(n_components=2, covariance_type='full')
+gmm.fit(df_cool)
+cluster_labels_cool = gmm.fit_predict(df_cool)
+df_cool['temp_c_cluster'] = cluster_labels_cool
+
+gmm.fit(df_heat)
+cluster_labels_heat = gmm.fit_predict(df_heat)
+df_heat['temp_h_cluster'] = cluster_labels_heat
+
+df_ = pd.concat([df, df_heat.temp_h_cluster, df_cool.temp_c_cluster], axis = 1)
+# add random cluster for na values so that the model is able to run (are we influencing the prediction?)
+df_.temp_h_cluster = df_.temp_h_cluster.fillna(np.nanmax(df_.temp_h_cluster)+1)
+df_.temp_c_cluster = df_.temp_c_cluster.fillna(np.nanmax(df_.temp_c_cluster)+1)
+df_.temp_h_cluster =  df_.temp_h_cluster.astype('int64')
+df_.temp_c_cluster =  df_.temp_c_cluster.astype('int64')
+df_.to_csv('/Users/beegroup/Github/Bayes-M&V/data/Id50_preprocessed2.csv')
