@@ -7,6 +7,10 @@ import pandas as pd
 import pymc3 as pm
 import xarray as xr
 import warnings
+from sklearn.metrics import mean_squared_error
+from math import sqrt
+from pymc3.variational.callbacks import CheckParametersConvergence
+
 
 RANDOM_SEED = 8924
 
@@ -53,6 +57,8 @@ clusters = df.s
 unique_clusters = clusters.unique()
 heat_clusters = df.temp_h_cluster
 cool_clusters = df.temp_c_cluster
+unique_heat_clusters = heat_clusters.unique()
+unique_cool_clusters = cool_clusters.unique()
 n_hours = len(df.index)
 df.t = pd.to_datetime(pd.Series(df.t))
 dayhour = df['t'].dt.hour
@@ -60,7 +66,9 @@ temperature = df.outdoor_temp
 outdoor_temp_c = df.outdoor_temp_c
 outdoor_temp_h = df.outdoor_temp_h
 coords = {"obs_id": np.arange(temperature.size)}
-coords["Cluster"] = unique_clusters
+coords["profile_cluster"] = unique_clusters
+coords["heat_cluster"] = unique_heat_clusters
+coords["cool_cluster"] = unique_cool_clusters
 daypart_fs_sin_1 = df.daypart_fs_sin_1
 daypart_fs_sin_2 = df.daypart_fs_sin_2
 daypart_fs_sin_3 = df.daypart_fs_sin_3
@@ -73,7 +81,7 @@ daypart_fs_cos_4 = df.daypart_fs_cos_4
 daypart_fs_cos_5 = df.daypart_fs_cos_5
 
 
-#Might want to try temperature clustering
+# Intercept, Fourier, temperatures, with profile and temperature clustering
 
 with pm.Model(coords=coords) as partial_pooling:
     profile_cluster_idx = pm.Data("profile_cluster_idx", clusters, dims="obs_id")
@@ -94,9 +102,6 @@ with pm.Model(coords=coords) as partial_pooling:
     cooling_temp = pm.Data("cooling_temp", outdoor_temp_c, dims="obs_id")
     heating_temp = pm.Data("heating_temp", outdoor_temp_h, dims="obs_id")
 
-    # Varying intercepts
-    a_cluster = pm.Normal("a_cluster", mu=a, sigma=sigma_a, dims="Cluster")
-
     # Hyperpriors:
     bf = pm.Normal("bf", mu=0.0, sigma=1.0)
     sigma_bf = pm.Exponential("sigma_bf", 1.0)
@@ -108,22 +113,25 @@ with pm.Model(coords=coords) as partial_pooling:
     sigma_btc = pm.Exponential("sigma_btc", 1.0)
     sigma_bth = pm.Exponential("sigma_bth", 1.0)
 
+    # Varying intercepts
+    a_cluster = pm.Normal("a_cluster", mu=a, sigma=sigma_a, dims="profile_cluster")
+
     # Varying slopes:
-    bs1 = pm.Normal("bs1", mu=bf, sigma=sigma_bf, dims="Cluster")
-    bs2 = pm.Normal("bs2", mu=bf, sigma=sigma_bf, dims="Cluster")
-    bs3 = pm.Normal("bs3", mu=bf, sigma=sigma_bf, dims="Cluster")
-    bs4 = pm.Normal("bs4", mu=bf, sigma=sigma_bf, dims="Cluster")
-    bs5 = pm.Normal("bs5", mu=bf, sigma=sigma_bf, dims="Cluster")
-    bc1 = pm.Normal("bc1", mu=bf, sigma=sigma_bf, dims="Cluster")
-    bc2 = pm.Normal("bc2", mu=bf, sigma=sigma_bf, dims="Cluster")
-    bc3 = pm.Normal("bc3", mu=bf, sigma=sigma_bf, dims="Cluster")
-    bc4 = pm.Normal("bc4", mu=bf, sigma=sigma_bf, dims="Cluster")
-    bc5 = pm.Normal("bc5", mu=bf, sigma=sigma_bf, dims="Cluster")
-    btc_cluster = pm.Normal("btc_cluster", mu=btc, sigma=sigma_btc)
-    bth_cluster = pm.Normal("bth_cluster", mu=bth, sigma=sigma_bth)
+    bs1 = pm.Normal("bs1", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bs2 = pm.Normal("bs2", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bs3 = pm.Normal("bs3", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bs4 = pm.Normal("bs4", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bs5 = pm.Normal("bs5", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bc1 = pm.Normal("bc1", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bc2 = pm.Normal("bc2", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bc3 = pm.Normal("bc3", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bc4 = pm.Normal("bc4", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bc5 = pm.Normal("bc5", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    btc_cluster = pm.Normal("btc_cluster", mu=btc, sigma=sigma_btc, dims="cool_cluster")
+    bth_cluster = pm.Normal("bth_cluster", mu=bth, sigma=sigma_bth, dims="heat_cluster")
 
     # Expected value per county:
-    mu = a_cluster[cluster_idx] + bs1[profile_cluster_idx] * fs_sin_1 + bs2[profile_cluster_idx] * fs_sin_2 + \
+    mu = a_cluster[profile_cluster_idx] + bs1[profile_cluster_idx] * fs_sin_1 + bs2[profile_cluster_idx] * fs_sin_2 + \
          bs3[profile_cluster_idx] * fs_sin_3 + bs4[profile_cluster_idx] * fs_sin_4 + \
          bs5[profile_cluster_idx] * fs_sin_5 + bc1[profile_cluster_idx] * fs_cos_1 + \
          bc2[profile_cluster_idx] * fs_cos_2 + bc3[profile_cluster_idx] * fs_cos_3 + \
@@ -136,13 +144,22 @@ with pm.Model(coords=coords) as partial_pooling:
     y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity, dims="obs_id")
 
 
-# Need to install graphviz
+
+# Graphviz visualisation
 varying_intercept_and_temp_graph = pm.model_to_graphviz(partial_pooling)
 varying_intercept_and_temp_graph.render(filename='img/varying_intercept_and_temp_hourly')
 
-
+#Fitting without sampling
 with partial_pooling:
-    partial_pooling_trace = pm.sample(random_seed=RANDOM_SEED, init = 'adapt_diag')
+    approx = pm.fit(n=50000,
+                    method='fullrank_advi',
+                    callbacks=[CheckParametersConvergence(tolerance=0.01)])
+    partial_pooling_trace = approx.sample(1000)
+    partial_pooling_idata = az.from_pymc3(partial_pooling_trace)
+
+# Fitting by sampling
+with partial_pooling:
+    partial_pooling_trace = pm.sample(random_seed=RANDOM_SEED, chains = 4, cores = 4, target_accept = 0.99)
     partial_pooling_idata = az.from_pymc3(partial_pooling_trace)
 
 az.summary(partial_pooling_idata, round_to=2)
@@ -164,302 +181,91 @@ partial_pooling_bc3_means = np.mean(partial_pooling_trace['bc3'], axis =0)
 partial_pooling_bc4_means = np.mean(partial_pooling_trace['bc4'], axis =0)
 partial_pooling_bc5_means = np.mean(partial_pooling_trace['bc5'], axis =0)
 
-partial_pooling_bth_means = np.mean(partial_pooling_trace['bth'], axis = 0)
-partial_pooling_btc_means = np.mean(partial_pooling_trace['btc'], axis = 0)
+partial_pooling_bth_means = np.mean(partial_pooling_trace['btc_cluster'], axis = 0)
+partial_pooling_btc_means = np.mean(partial_pooling_trace['btc_cluster'], axis = 0)
 # Create array with predictions
 partial_pooling_predictions = []
 # Create array with bounds
-# varying_intercept_slope_hdi = az.hdi(varying_temp_idata)
-# varying_intercept_slope_mean_lower = []
-# varying_intercept_slope_mean_higher= []
-# varying_intercept_slope_lower = []
-# varying_intercept_slope_higher= []
+partial_pooling_hdi = az.hdi(partial_pooling_idata)
+partial_pooling_mean_lower = []
+partial_pooling_mean_higher= []
+partial_pooling_lower = []
+partial_pooling_higher= []
 
 for hour, row in df.iterrows():
     for cluster_idx in unique_clusters:
         if clusters[hour] == cluster_idx:
-            partial_pooling_predictions.append(partial_pooling_acluster_means[cluster_idx] + \
-                                               partial_pooling_bs1_means[cluster_idx] * daypart_fs_sin_1[hour] + \
-                                               partial_pooling_bs2_means[cluster_idx] * daypart_fs_sin_2[hour] + \
-                                               partial_pooling_bs3_means[cluster_idx] * daypart_fs_sin_3[hour] + \
-                                               partial_pooling_bs4_means[cluster_idx] * daypart_fs_sin_4[hour] + \
-                                               partial_pooling_bs5_means[cluster_idx] * daypart_fs_sin_5[hour] + \
-                                               partial_pooling_bc1_means[cluster_idx] * daypart_fs_cos_1[hour] + \
-                                               partial_pooling_bc2_means[cluster_idx] * daypart_fs_cos_2[hour] + \
-                                               partial_pooling_bc3_means[cluster_idx] * daypart_fs_cos_3[hour] + \
-                                               partial_pooling_bc4_means[cluster_idx] * daypart_fs_cos_4[hour] + \
-                                               partial_pooling_bc5_means[cluster_idx] * daypart_fs_cos_5[hour] + \
-                                               partial_pooling_bth_means * outdoor_temp_h[hour] + \
-                                               partial_pooling_btc_means * outdoor_temp_c[hour])
+            for heat_cluster_idx in unique_heat_clusters:
+                if heat_clusters[hour] == heat_cluster_idx:
+                    for cool_cluster_idx in unique_cool_clusters:
+                        if cool_clusters[hour] == cool_cluster_idx:
+
+                            partial_pooling_predictions.append(partial_pooling_acluster_means[cluster_idx] + \
+                                                               partial_pooling_bs1_means[cluster_idx] * daypart_fs_sin_1[hour] + \
+                                                               partial_pooling_bs2_means[cluster_idx] * daypart_fs_sin_2[hour] + \
+                                                               partial_pooling_bs3_means[cluster_idx] * daypart_fs_sin_3[hour] + \
+                                                               partial_pooling_bs4_means[cluster_idx] * daypart_fs_sin_4[hour] + \
+                                                               partial_pooling_bs5_means[cluster_idx] * daypart_fs_sin_5[hour] + \
+                                                               partial_pooling_bc1_means[cluster_idx] * daypart_fs_cos_1[hour] + \
+                                                               partial_pooling_bc2_means[cluster_idx] * daypart_fs_cos_2[hour] + \
+                                                               partial_pooling_bc3_means[cluster_idx] * daypart_fs_cos_3[hour] + \
+                                                               partial_pooling_bc4_means[cluster_idx] * daypart_fs_cos_4[hour] + \
+                                                               partial_pooling_bc5_means[cluster_idx] * daypart_fs_cos_5[hour] + \
+                                                               partial_pooling_bth_means[heat_cluster_idx] * outdoor_temp_h[hour] + \
+                                                               partial_pooling_btc_means[cool_cluster_idx] * outdoor_temp_c[hour])
+
+# Calculate prediction error
+predictions = np.exp(partial_pooling_predictions)
+mse = mean_squared_error(df.total_electricity, predictions)
+rmse = sqrt(mse)
+cvrmse = rmse/df.total_electricity.mean()
+
+# PLOTS
 
 # output to static HTML file
 output_file("predictions.html")
 
+# predictions vs real log scale
 p = figure(plot_width=800, plot_height=400)
 
-# add a circle renderer with a size, color, and alpha
 p.circle(df.index, partial_pooling_predictions, size=5, color="navy", alpha=0.5)
-p.circle(df.index, log_electricity, size=5, color="orange", alpha=0.5)
-# show the results
+p.circle(df.index, log_electricity, size=5, color="orange", alpha=0.2)
 show(p)
+
+# predictions vs real
 
 p2 = figure(plot_width=800, plot_height=400)
 
-p2.circle(df.index, log_electricity, size=5, color="orange", alpha=0.5)
+p2.circle(df.index, predictions, size=5, color="navy", alpha=0.5)
+p2.circle(df.index, df.total_electricity, size = 5, color="orange", alpha=0.2)
 show(p2)
 
-#Cons vs temp
+# Temperature varying predictions vs real log scale and normal scale
 p3 = figure(plot_width=800, plot_height=400)
 
-# add a circle renderer with a size, color, and alpha
 p3.circle(df.outdoor_temp, partial_pooling_predictions, size=5, color="navy", alpha=0.5)
-p3.circle(df.outdoor_temp, log_electricity, size=5, color="orange", alpha=0.5)
+p3.circle(df.outdoor_temp, log_electricity, size=5, color="orange", alpha=0.2)
 # show the results
 show(p3)
 
-actual_predictions = np.exp(partial_pooling_predictions)
-
 p4 = figure(plot_width=800, plot_height=400)
 
-# add a circle renderer with a size, color, and alpha
-p4.circle(df.index, actual_predictions, size=5, color="navy", alpha=0.5)
-p4.circle(df.index, df.total_electricity, size=5, color="orange", alpha=0.5)
-p4.y_range.end = 30000
-# show t
+p4.circle(df.outdoor_temp, predictions, size=5, color="navy", alpha=0.5)
+p4.circle(df.outdoor_temp, df.total_electricity, size=5, color="orange", alpha=0.2)
+# show the results
 show(p4)
 
 #Plot temperatures
 
 p5 = figure(plot_width=800, plot_height=400)
 
-# add a circle renderer with a size, color, and alpha
-
 p5.circle(df.index, df.outdoor_temp_h, size=5, color="red", alpha=0.5)
-p5.circle(df.index, df.outdoor_temp_c, size=5, color="navy", alpha=0.5)
+p5.circle(df.index, df.outdoor_temp_c, size=5, color="navy", alpha=0.2)
 show(p5)
 
+# Plot consumption
+
 p6 = figure(plot_width=800, plot_height=400)
-
-# add a circle renderer with a size, color, and alpha
-
-p6.circle(df.index, df.outdoor_temp, size=5, color="red", alpha=0.5)
-# show t
+p6.line(df.index, df.total_electricity, color="orange")
 show(p6)
 
-#Cons vs temp
-p7 = figure(plot_width=800, plot_height=400)
-
-# add a circle renderer with a size, color, and alpha
-p7.circle(df.outdoor_temp, df.total_electricity, size=5, color="navy", alpha=0.5)
-# show the results
-show(p7)
-
-# Try a model without temperature term to understand if it's the temperature that it's screwing the model
-
-with pm.Model(coords=coords) as partial_pooling_notemp:
-    cluster_idx = pm.Data("cluster_idx", clusters, dims="obs_id")
-    fs_sin_1 = pm.Data("fs_sin_1", daypart_fs_sin_1, dims = "obs_id")
-    fs_sin_2 = pm.Data("fs_sin_2", daypart_fs_sin_2, dims = "obs_id")
-    fs_sin_3 = pm.Data("fs_sin_3", daypart_fs_sin_3, dims = "obs_id")
-    fs_sin_4 = pm.Data("fs_sin_4", daypart_fs_sin_4, dims = "obs_id")
-    fs_sin_5 = pm.Data("fs_sin_5", daypart_fs_sin_5, dims = "obs_id")
-    fs_cos_1 = pm.Data("fs_cos_1", daypart_fs_cos_1, dims = "obs_id")
-    fs_cos_2 = pm.Data("fs_cos_2", daypart_fs_cos_2, dims = "obs_id")
-    fs_cos_3 = pm.Data("fs_cos_3", daypart_fs_cos_3, dims = "obs_id")
-    fs_cos_4 = pm.Data("fs_cos_4", daypart_fs_cos_4, dims = "obs_id")
-    fs_cos_5 = pm.Data("fs_cos_5", daypart_fs_cos_5, dims = "obs_id")
-
-    # Hyperpriors:
-    bf = pm.Normal("bf", mu=0.0, sigma=1.0)
-    sigma_bf = pm.Exponential("sigma_bf", 1.0)
-
-
-    # Varying intercepts:
-    bs1 = pm.Normal("bs1", mu=bf, sigma=sigma_bf, dims="Cluster")
-    bs2 = pm.Normal("bs2", mu=bf, sigma=sigma_bf, dims="Cluster")
-    bs3 = pm.Normal("bs3", mu=bf, sigma=sigma_bf, dims="Cluster")
-    bs4 = pm.Normal("bs4", mu=bf, sigma=sigma_bf, dims="Cluster")
-    bs5 = pm.Normal("bs5", mu=bf, sigma=sigma_bf, dims="Cluster")
-    bc1 = pm.Normal("bc1", mu=bf, sigma=sigma_bf, dims="Cluster")
-    bc2 = pm.Normal("bc2", mu=bf, sigma=sigma_bf, dims="Cluster")
-    bc3 = pm.Normal("bc3", mu=bf, sigma=sigma_bf, dims="Cluster")
-    bc4 = pm.Normal("bc4", mu=bf, sigma=sigma_bf, dims="Cluster")
-    bc5 = pm.Normal("bc5", mu=bf, sigma=sigma_bf, dims="Cluster")
-
-    # Expected value per county:
-    mu = bs1[cluster_idx] * fs_sin_1 + bs2[cluster_idx] * fs_sin_2 + bs3[cluster_idx] * fs_sin_3 + \
-         bs4[cluster_idx] * fs_sin_4 + bs5[cluster_idx] * fs_sin_5 + bc1[cluster_idx] * fs_cos_1 + \
-         bc2[cluster_idx] * fs_cos_2 + bc3[cluster_idx] * fs_cos_3 + bc4[cluster_idx] * fs_cos_4 + \
-         bc5[cluster_idx] * fs_cos_5
-
-    # Model error:
-    sigma = pm.Exponential("sigma", 1.0)
-
-    y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity, dims="obs_id")
-
-
-with partial_pooling_notemp:
-    partial_pooling_notemp_trace = pm.sample(random_seed=RANDOM_SEED, target_accept = 0.99)
-    partial_pooling_notemp_idata = az.from_pymc3(partial_pooling_notemp_trace)
-
-az.summary(partial_pooling_notemp_idata, round_to=2)
-az.plot_trace(partial_pooling_notemp_idata)
-plt.show()
-
-partial_pooling_notemp_bs1_means = np.mean(partial_pooling_notemp_trace['bs1'], axis =0)
-partial_pooling_notemp_bs2_means = np.mean(partial_pooling_notemp_trace['bs2'], axis =0)
-partial_pooling_notemp_bs3_means = np.mean(partial_pooling_notemp_trace['bs3'], axis =0)
-partial_pooling_notemp_bs4_means = np.mean(partial_pooling_notemp_trace['bs4'], axis =0)
-partial_pooling_notemp_bs5_means = np.mean(partial_pooling_notemp_trace['bs5'], axis =0)
-partial_pooling_notemp_bc1_means = np.mean(partial_pooling_notemp_trace['bc1'], axis =0)
-partial_pooling_notemp_bc2_means = np.mean(partial_pooling_notemp_trace['bc2'], axis =0)
-partial_pooling_notemp_bc3_means = np.mean(partial_pooling_notemp_trace['bc3'], axis =0)
-partial_pooling_notemp_bc4_means = np.mean(partial_pooling_notemp_trace['bc4'], axis =0)
-partial_pooling_notemp_bc5_means = np.mean(partial_pooling_notemp_trace['bc5'], axis =0)
-# Create array with predictions
-partial_pooling_notemp_predictions = []
-
-for hour, row in df.iterrows():
-    for cluster_idx in unique_clusters:
-        if clusters[hour] == cluster_idx:
-            partial_pooling_notemp_predictions.append(partial_pooling_notemp_bs1_means[cluster_idx] * daypart_fs_sin_1[hour] + \
-                                                      partial_pooling_notemp_bs2_means[cluster_idx] * daypart_fs_sin_2[hour] + \
-                                                      partial_pooling_notemp_bs3_means[cluster_idx] * daypart_fs_sin_3[hour] + \
-                                                      partial_pooling_notemp_bs4_means[cluster_idx] * daypart_fs_sin_4[hour] + \
-                                                      partial_pooling_notemp_bs5_means[cluster_idx] * daypart_fs_sin_5[hour] + \
-                                                      partial_pooling_notemp_bc1_means[cluster_idx] * daypart_fs_cos_1[hour] + \
-                                                      partial_pooling_notemp_bc2_means[cluster_idx] * daypart_fs_cos_2[hour] + \
-                                                      partial_pooling_notemp_bc3_means[cluster_idx] * daypart_fs_cos_3[hour] + \
-                                                      partial_pooling_notemp_bc4_means[cluster_idx] * daypart_fs_cos_4[hour] + \
-                                                      partial_pooling_notemp_bc5_means[cluster_idx] * daypart_fs_cos_5[hour])
-
-
-
-p = figure(plot_width=800, plot_height=400)
-
-# add a circle renderer with a size, color, and alpha
-p.circle(df.index, partial_pooling_notemp_predictions, size=5, color="navy", alpha=0.5)
-p.circle(df.index, log_electricity, size=5, color="orange", alpha=0.5)
-# show the results
-show(p)
-
-
-# HOUR OF THE DAY + TEMPERATURE SLOPE ( NO FOURIER )
-
-
-with pm.Model(coords=coords) as partial_pooling_hour:
-    cluster_idx = pm.Data("cluster_idx", clusters, dims="obs_id")
-    hour = pm.Data("hour", dayhour, dims = "obs_id")
-
-    cooling_temp = pm.Data("cooling_temp", outdoor_temp_c, dims="obs_id")
-    heating_temp = pm.Data("heating_temp", outdoor_temp_h, dims="obs_id")
-
-    # Fixed intercepts
-    btc = pm.Normal("btc", mu=0.0, sigma=1.0)
-    bth = pm.Normal("bth", mu=0.0, sigma=1.0)
-    # Hyperpriors:
-    bh_mean = pm.Normal("bh_mean", mu=0.0, sigma=1.0)
-    sigma_bh = pm.Exponential("sigma_bh", 1.0)
-
-    # Varying intercepts:
-    bh = pm.Normal("bh", mu=bh_mean, sigma=sigma_bh, dims="Cluster")
-
-    # Expected value per county:
-    mu = bh[cluster_idx] * hour + btc * cooling_temp + bth * heating_temp
-
-    # Model error:
-    sigma = pm.Exponential("sigma", 1.0)
-
-    y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity, dims="obs_id")
-
-with partial_pooling_hour:
-    partial_pooling_hour_trace = pm.sample(random_seed=RANDOM_SEED, init = 'adapt_diag',
-                                           target_accept = 0.99)
-    partial_pooling_hour_idata = az.from_pymc3(partial_pooling_hour_trace)
-
-
-# Calculate predictions
-partial_pooling_hour_bh_means = np.mean(partial_pooling_hour_trace['bh'], axis =0)
-partial_pooling_hour_bth_means = np.mean(partial_pooling_hour_trace['bth'], axis = 0)
-partial_pooling_hour_btc_means = np.mean(partial_pooling_hour_trace['btc'], axis = 0)
-# Create array with predictions
-partial_pooling_hour_predictions = []
-# Create array with bounds
-# varying_intercept_slope_hdi = az.hdi(varying_temp_idata)
-# varying_intercept_slope_mean_lower = []
-# varying_intercept_slope_mean_higher= []
-# varying_intercept_slope_lower = []
-# varying_intercept_slope_higher= []
-
-for hour, row in df.iterrows():
-    for cluster_idx in unique_clusters:
-        if clusters[hour] == cluster_idx:
-            partial_pooling_hour_predictions.append(partial_pooling_hour_bh_means[cluster_idx] * dayhour[hour]+ \
-                                                    partial_pooling_hour_bth_means * outdoor_temp_h[hour] + \
-                                                    partial_pooling_hour_btc_means * outdoor_temp_c[hour])
-
-p = figure(plot_width=800, plot_height=400)
-
-# add a circle renderer with a size, color, and alpha
-p.circle(df.index, partial_pooling_hour_predictions, size=5, color="navy", alpha=0.5)
-p.circle(df.index, log_electricity, size=5, color="orange", alpha=0.5)
-# show the results
-show(p)
-
-
-# An intercept-temperature model with debugging purpose
-
-
-with pm.Model(coords=coords) as partial_pooling_intercept:
-    cluster_idx = pm.Data("cluster_idx", clusters, dims="obs_id")
-
-    cooling_temp = pm.Data("cooling_temp", outdoor_temp_c, dims="obs_id")
-    heating_temp = pm.Data("heating_temp", outdoor_temp_h, dims="obs_id")
-
-    # Fixed intercepts
-    btc = pm.Normal("btc", mu=0.0, sigma=1.0)
-    bth = pm.Normal("bth", mu=0.0, sigma=1.0)
-    # Hyperpriors:
-    a = pm.Normal("a", mu=0.0, sigma=1.0)
-    sigma_a = pm.Exponential("sigma_a", 1.0)
-
-    # Varying intercepts:
-    a_cluster = pm.Normal("a", mu=a, sigma=sigma_a, dims="Cluster")
-
-    # Expected value per county:
-    mu = a_cluster[cluster_idx] + btc * cooling_temp + bth * heating_temp
-
-    # Model error:
-    sigma = pm.Exponential("sigma", 1.0)
-
-    y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity, dims="obs_id")
-
-with partial_pooling_intercept:
-    partial_pooling_intercept_trace= pm.sample(random_seed=RANDOM_SEED, init = 'adapt_diag',
-                                           target_accept = 0.99)
-    partial_pooling_intercept_idata = az.from_pymc3(partial_pooling_intercept_trace)
-
-
-# Calculate predictions
-partial_pooling_intercept_a_means = np.mean(partial_pooling_intercept_trace['a'], axis =0)
-partial_pooling_intercept_bth_means = np.mean(partial_pooling_intercept_trace['bth'], axis = 0)
-partial_pooling_intercept_btc_means = np.mean(partial_pooling_intercept_trace['btc'], axis = 0)
-# Create array with predictions
-partial_pooling_intercept_predictions = []
-
-for hour, row in df.iterrows():
-    for cluster_idx in unique_clusters:
-        if clusters[hour] == cluster_idx:
-            partial_pooling_intercept_predictions.append(partial_pooling_intercept_a_means[cluster_idx]+ \
-                                                         partial_pooling_intercept_bth_means * outdoor_temp_h[hour] + \
-                                                         partial_pooling_intercept_btc_means * outdoor_temp_c[hour])
-
-
-
-p = figure(plot_width=800, plot_height=400)
-
-# add a circle renderer with a size, color, and alpha
-p.circle(df.index, partial_pooling_intercept_predictions, size=5, color="navy", alpha=0.5)
-p.circle(df.index, log_electricity, size=5, color="orange", alpha=0.5)
-# show the results
-show(p)
