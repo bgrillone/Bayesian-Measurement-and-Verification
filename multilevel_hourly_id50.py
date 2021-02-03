@@ -143,12 +143,6 @@ with pm.Model(coords=coords) as partial_pooling:
 
     y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity, dims="obs_id")
 
-
-
-# Graphviz visualisation
-varying_intercept_and_temp_graph = pm.model_to_graphviz(partial_pooling)
-varying_intercept_and_temp_graph.render(filename='img/varying_intercept_and_temp_hourly')
-
 #Fitting without sampling
 with partial_pooling:
     approx = pm.fit(n=50000,
@@ -157,9 +151,100 @@ with partial_pooling:
     partial_pooling_trace = approx.sample(1000)
     partial_pooling_idata = az.from_pymc3(partial_pooling_trace)
 
-# Fitting by sampling
-with partial_pooling:
-    partial_pooling_trace = pm.sample(random_seed=RANDOM_SEED, chains = 4, cores = 4, target_accept = 0.99)
+
+# Intercept, Fourier, temperatures, with profile and temperature clustering -  MINIBATCH
+
+with pm.Model(coords=coords) as partial_pooling_mb:
+    profile_cluster_idx = pm.Data("profile_cluster_idx", clusters, dims="obs_id")
+    heat_temp_cluster_idx = pm.Data("heat_temp_cluster_idx", heat_clusters, dims="obs_id")
+    cool_temp_cluster_idx = pm.Data("cool_temp_cluster_idx", cool_clusters, dims="obs_id")
+
+    fs_sin_1 = pm.Data("fs_sin_1", daypart_fs_sin_1, dims = "obs_id")
+    fs_sin_2 = pm.Data("fs_sin_2", daypart_fs_sin_2, dims = "obs_id")
+    fs_sin_3 = pm.Data("fs_sin_3", daypart_fs_sin_3, dims = "obs_id")
+    fs_sin_4 = pm.Data("fs_sin_4", daypart_fs_sin_4, dims = "obs_id")
+    fs_sin_5 = pm.Data("fs_sin_5", daypart_fs_sin_5, dims = "obs_id")
+    fs_cos_1 = pm.Data("fs_cos_1", daypart_fs_cos_1, dims = "obs_id")
+    fs_cos_2 = pm.Data("fs_cos_2", daypart_fs_cos_2, dims = "obs_id")
+    fs_cos_3 = pm.Data("fs_cos_3", daypart_fs_cos_3, dims = "obs_id")
+    fs_cos_4 = pm.Data("fs_cos_4", daypart_fs_cos_4, dims = "obs_id")
+    fs_cos_5 = pm.Data("fs_cos_5", daypart_fs_cos_5, dims = "obs_id")
+
+    cooling_temp = pm.Data("cooling_temp", outdoor_temp_c, dims="obs_id")
+    heating_temp = pm.Data("heating_temp", outdoor_temp_h, dims="obs_id")
+
+    # Minibatch replacements
+    batch_size = 1000
+    profile_cluster_mb = pm.Minibatch(profile_cluster_idx.get_value(), batch_size)
+    heat_cluster_mb = pm.Minibatch(heat_temp_cluster_idx.get_value(), batch_size)
+    cool_cluster_mb = pm.Minibatch(cool_temp_cluster_idx.get_value(), batch_size)
+    fs1_mb = pm.Minibatch(fs_sin_1.get_value(), batch_size)
+    fs2_mb = pm.Minibatch(fs_sin_2.get_value(), batch_size)
+    fs3_mb = pm.Minibatch(fs_sin_3.get_value(), batch_size)
+    fs4_mb = pm.Minibatch(fs_sin_4.get_value(), batch_size)
+    fs5_mb = pm.Minibatch(fs_sin_5.get_value(), batch_size)
+    fc1_mb = pm.Minibatch(fs_cos_1.get_value(), batch_size)
+    fc2_mb = pm.Minibatch(fs_cos_2.get_value(), batch_size)
+    fc3_mb = pm.Minibatch(fs_cos_3.get_value(), batch_size)
+    fc4_mb = pm.Minibatch(fs_cos_4.get_value(), batch_size)
+    fc5_mb = pm.Minibatch(fs_cos_5.get_value(), batch_size)
+    cooling_temp_mb = pm.Minibatch(cooling_temp.get_value(), batch_size)
+    heating_temp_mb = pm.Minibatch(heating_temp.get_value(), batch_size)
+    log_electricity_mb = pm.Minibatch(log_electricity, batch_size)
+
+
+    # Hyperpriors:
+    bf = pm.Normal("bf", mu=0.0, sigma=1.0)
+    sigma_bf = pm.Exponential("sigma_bf", 1.0)
+    a = pm.Normal("a", mu=0.0, sigma=1.0)
+    sigma_a = pm.Exponential("sigma_a", 1.0)
+
+    btc = pm.Normal("btc", mu=0.0, sigma=1.0)
+    bth = pm.Normal("bth", mu=0.0, sigma=1.0)
+    sigma_btc = pm.Exponential("sigma_btc", 1.0)
+    sigma_bth = pm.Exponential("sigma_bth", 1.0)
+
+    # Varying intercepts
+    a_cluster = pm.Normal("a_cluster", mu=a, sigma=sigma_a, dims="profile_cluster")
+
+    # Varying slopes:
+    bs1 = pm.Normal("bs1", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bs2 = pm.Normal("bs2", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bs3 = pm.Normal("bs3", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bs4 = pm.Normal("bs4", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bs5 = pm.Normal("bs5", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bc1 = pm.Normal("bc1", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bc2 = pm.Normal("bc2", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bc3 = pm.Normal("bc3", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bc4 = pm.Normal("bc4", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bc5 = pm.Normal("bc5", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    btc_cluster = pm.Normal("btc_cluster", mu=btc, sigma=sigma_btc, dims="cool_cluster")
+    bth_cluster = pm.Normal("bth_cluster", mu=bth, sigma=sigma_bth, dims="heat_cluster")
+
+    # Expected value per county:
+    mu = a_cluster[profile_cluster_mb] + bs1[profile_cluster_mb] * fs1_mb + bs2[profile_cluster_mb] * fs2_mb + \
+         bs3[profile_cluster_mb] * fs3_mb + bs4[profile_cluster_mb] * fs4_mb + \
+         bs5[profile_cluster_mb] * fs5_mb + bc1[profile_cluster_mb] * fc1_mb + \
+         bc2[profile_cluster_mb] * fc2_mb + bc3[profile_cluster_mb] * fc3_mb + \
+         bc4[profile_cluster_mb] * fc4_mb + bc5[profile_cluster_mb] * fc5_mb + \
+         btc_cluster[cool_cluster_mb] * cooling_temp_mb + bth_cluster[heat_cluster_mb] * heating_temp_mb
+
+    # Model error:
+    sigma = pm.Exponential("sigma", 1.0)
+
+    y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity_mb, total_size = n_hours)
+
+
+# Graphviz visualisation
+varying_intercept_and_temp_graph = pm.model_to_graphviz(partial_pooling)
+varying_intercept_and_temp_graph.render(filename='img/varying_intercept_and_temp_hourly')
+
+#Fitting without sampling
+with partial_pooling_mb:
+    approx = pm.fit(n=50000,
+                    method='fullrank_advi',
+                    callbacks=[CheckParametersConvergence(tolerance=0.01)])
+    partial_pooling_trace = approx.sample(1000)
     partial_pooling_idata = az.from_pymc3(partial_pooling_trace)
 
 az.summary(partial_pooling_idata, round_to=2)
