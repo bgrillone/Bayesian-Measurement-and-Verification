@@ -54,7 +54,11 @@ show(gridplot([p1,p2], ncols = 2))
 # Create local variables (clusters need to start from 0)
 # Daypart 06 17 24
 df.t = pd.to_datetime(pd.Series(df.t))
-df["daypart"] = np.where(df['t'].dt.hour >= 6, np.where(df['t'].dt.hour <= 17,1,2),0)
+df["daypart"] = np.where(df['t'].dt.hour <= 19,
+                         np.where(df['t'].dt.hour <= 15,
+                                  np.where(df['t'].dt.hour <= 11,
+                                           np.where(df['t'].dt.hour <= 7,
+                                                    np.where(df['t'].dt.hour <= 3,0,1),2),3),4),5)
 df.s = df.s -1
 clusters = df.s
 unique_clusters = clusters.unique()
