@@ -11,11 +11,10 @@ from sklearn.metrics import mean_squared_error
 from math import sqrt
 from pymc3.variational.callbacks import CheckParametersConvergence
 
-
 RANDOM_SEED = 8924
 
 # Data import
-df = pd.read_csv("/Users/beegroup/Github/Bayes-M&V/data/Id50_preprocessed2.csv", index_col = 0)
+df = pd.read_csv("/Users/beegroup/Github/Bayes-M&V/data/Id50_preprocessed2.csv", index_col=0)
 
 # Check if there's NAs
 df.isna().sum()
@@ -26,7 +25,8 @@ total_electricity = df.total_electricity.values
 
 # Plotting data
 measured = df[np.isfinite(df["total_electricity"])].total_electricity
-hist, edges = np.histogram(measured, density = True, bins = 50)
+hist, edges = np.histogram(measured, density=True, bins=50)
+
 
 def make_plot(title, hist, edges, x):
     p = figure(title=title, tools='', background_fill_color="#fafafa")
@@ -36,39 +36,39 @@ def make_plot(title, hist, edges, x):
     p.y_range.start = 0
     p.xaxis.axis_label = 'x'
     p.yaxis.axis_label = 'Pr(x)'
-    p.grid.grid_line_color="white"
+    p.grid.grid_line_color = "white"
     return p
-  
-x = np.linspace (0, 30000, num=3000)
+
+
+x = np.linspace(0, 30000, num=3000)
 p1 = make_plot("Electricity hist", hist, edges, x)
 
 measured_log = df[np.isfinite(df["total_electricity"])].log_v
-hist_l, edges_l = np.histogram(measured_log, density = True, bins = 50)
-x_l = np.linspace (0, 12, num=20)
+hist_l, edges_l = np.histogram(measured_log, density=True, bins=50)
+x_l = np.linspace(0, 12, num=20)
 p2 = make_plot("Log Electricity Hist", hist_l, edges_l, x_l)
-show(gridplot([p1,p2], ncols = 2))
+show(gridplot([p1, p2], ncols=2))
 
-# They're not normal, even after logging: what do we do? GLM?
+# They're not normal, even after logging but what we really need to check is that the error is normal
 
-# Multilevel model
+
 # Create local variables (clusters need to start from 0)
-df.s = df.s -1
+# Daypart 06 17 24
+df.t = pd.to_datetime(pd.Series(df.t))
+df["daypart"] = np.where(df['t'].dt.hour >= 6, np.where(df['t'].dt.hour <= 17, 1, 2), 0)
+df.s = df.s - 1
 clusters = df.s
 unique_clusters = clusters.unique()
 heat_clusters = df.temp_h_cluster
 cool_clusters = df.temp_c_cluster
+dayparts = df.daypart
 unique_heat_clusters = heat_clusters.unique()
 unique_cool_clusters = cool_clusters.unique()
+unique_dayparts = dayparts.unique()
 n_hours = len(df.index)
-df.t = pd.to_datetime(pd.Series(df.t))
-dayhour = df['t'].dt.hour
 temperature = df.outdoor_temp
 outdoor_temp_c = df.outdoor_temp_c
 outdoor_temp_h = df.outdoor_temp_h
-coords = {"obs_id": np.arange(temperature.size)}
-coords["profile_cluster"] = unique_clusters
-coords["heat_cluster"] = unique_heat_clusters
-coords["cool_cluster"] = unique_cool_clusters
 daypart_fs_sin_1 = df.daypart_fs_sin_1
 daypart_fs_sin_2 = df.daypart_fs_sin_2
 daypart_fs_sin_3 = df.daypart_fs_sin_3
@@ -80,77 +80,11 @@ daypart_fs_cos_3 = df.daypart_fs_cos_3
 daypart_fs_cos_4 = df.daypart_fs_cos_4
 daypart_fs_cos_5 = df.daypart_fs_cos_5
 
-
-# Intercept, Fourier, temperatures, with profile and temperature clustering
-
-with pm.Model(coords=coords) as partial_pooling:
-    profile_cluster_idx = pm.Data("profile_cluster_idx", clusters, dims="obs_id")
-    heat_temp_cluster_idx = pm.Data("heat_temp_cluster_idx", heat_clusters, dims="obs_id")
-    cool_temp_cluster_idx = pm.Data("cool_temp_cluster_idx", cool_clusters, dims="obs_id")
-
-    fs_sin_1 = pm.Data("fs_sin_1", daypart_fs_sin_1, dims = "obs_id")
-    fs_sin_2 = pm.Data("fs_sin_2", daypart_fs_sin_2, dims = "obs_id")
-    fs_sin_3 = pm.Data("fs_sin_3", daypart_fs_sin_3, dims = "obs_id")
-    fs_sin_4 = pm.Data("fs_sin_4", daypart_fs_sin_4, dims = "obs_id")
-    fs_sin_5 = pm.Data("fs_sin_5", daypart_fs_sin_5, dims = "obs_id")
-    fs_cos_1 = pm.Data("fs_cos_1", daypart_fs_cos_1, dims = "obs_id")
-    fs_cos_2 = pm.Data("fs_cos_2", daypart_fs_cos_2, dims = "obs_id")
-    fs_cos_3 = pm.Data("fs_cos_3", daypart_fs_cos_3, dims = "obs_id")
-    fs_cos_4 = pm.Data("fs_cos_4", daypart_fs_cos_4, dims = "obs_id")
-    fs_cos_5 = pm.Data("fs_cos_5", daypart_fs_cos_5, dims = "obs_id")
-
-    cooling_temp = pm.Data("cooling_temp", outdoor_temp_c, dims="obs_id")
-    heating_temp = pm.Data("heating_temp", outdoor_temp_h, dims="obs_id")
-
-    # Hyperpriors:
-    bf = pm.Normal("bf", mu=0.0, sigma=1.0)
-    sigma_bf = pm.Exponential("sigma_bf", 1.0)
-    a = pm.Normal("a", mu=0.0, sigma=1.0)
-    sigma_a = pm.Exponential("sigma_a", 1.0)
-
-    btc = pm.Normal("btc", mu=0.0, sigma=1.0)
-    bth = pm.Normal("bth", mu=0.0, sigma=1.0)
-    sigma_btc = pm.Exponential("sigma_btc", 1.0)
-    sigma_bth = pm.Exponential("sigma_bth", 1.0)
-
-    # Varying intercepts
-    a_cluster = pm.Normal("a_cluster", mu=a, sigma=sigma_a, dims="profile_cluster")
-
-    # Varying slopes:
-    bs1 = pm.Normal("bs1", mu=bf, sigma=sigma_bf, dims="profile_cluster")
-    bs2 = pm.Normal("bs2", mu=bf, sigma=sigma_bf, dims="profile_cluster")
-    bs3 = pm.Normal("bs3", mu=bf, sigma=sigma_bf, dims="profile_cluster")
-    bs4 = pm.Normal("bs4", mu=bf, sigma=sigma_bf, dims="profile_cluster")
-    bs5 = pm.Normal("bs5", mu=bf, sigma=sigma_bf, dims="profile_cluster")
-    bc1 = pm.Normal("bc1", mu=bf, sigma=sigma_bf, dims="profile_cluster")
-    bc2 = pm.Normal("bc2", mu=bf, sigma=sigma_bf, dims="profile_cluster")
-    bc3 = pm.Normal("bc3", mu=bf, sigma=sigma_bf, dims="profile_cluster")
-    bc4 = pm.Normal("bc4", mu=bf, sigma=sigma_bf, dims="profile_cluster")
-    bc5 = pm.Normal("bc5", mu=bf, sigma=sigma_bf, dims="profile_cluster")
-    btc_cluster = pm.Normal("btc_cluster", mu=btc, sigma=sigma_btc, dims="cool_cluster")
-    bth_cluster = pm.Normal("bth_cluster", mu=bth, sigma=sigma_bth, dims="heat_cluster")
-
-    # Expected value per county:
-    mu = a_cluster[profile_cluster_idx] + bs1[profile_cluster_idx] * fs_sin_1 + bs2[profile_cluster_idx] * fs_sin_2 + \
-         bs3[profile_cluster_idx] * fs_sin_3 + bs4[profile_cluster_idx] * fs_sin_4 + \
-         bs5[profile_cluster_idx] * fs_sin_5 + bc1[profile_cluster_idx] * fs_cos_1 + \
-         bc2[profile_cluster_idx] * fs_cos_2 + bc3[profile_cluster_idx] * fs_cos_3 + \
-         bc4[profile_cluster_idx] * fs_cos_4 + bc5[profile_cluster_idx] * fs_cos_5 + \
-         btc_cluster[cool_temp_cluster_idx] * cooling_temp + bth_cluster[heat_temp_cluster_idx] * heating_temp
-
-    # Model error:
-    sigma = pm.Exponential("sigma", 1.0)
-
-    y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity, dims="obs_id")
-
-#Fitting without sampling
-with partial_pooling:
-    approx = pm.fit(n=50000,
-                    method='fullrank_advi',
-                    callbacks=[CheckParametersConvergence(tolerance=0.01)])
-    partial_pooling_trace = approx.sample(1000)
-    partial_pooling_idata = az.from_pymc3(partial_pooling_trace)
-
+coords = {"obs_id": np.arange(temperature.size)}
+coords["profile_cluster"] = unique_clusters
+coords["heat_cluster"] = unique_heat_clusters
+coords["cool_cluster"] = unique_cool_clusters
+coords["daypart"] = unique_dayparts
 
 # Intercept, Fourier, temperatures, with profile and temperature clustering -  MINIBATCH
 
@@ -236,8 +170,8 @@ with pm.Model(coords=coords) as partial_pooling_mb:
 
 
 # Graphviz visualisation
-varying_intercept_and_temp_graph = pm.model_to_graphviz(partial_pooling)
-varying_intercept_and_temp_graph.render(filename='img/varying_intercept_and_temp_hourly')
+partial_pooling_mb_graph = pm.model_to_graphviz(partial_pooling_mb)
+partial_pooling_mb_graph.render(filename='img/partial_pooling_mb')
 
 #Fitting without sampling
 with partial_pooling_mb:
@@ -253,6 +187,7 @@ plt.show()
 
 # Let's sample from the posterior to plot the predictions and have a rough estimate of the model accuracy
 # Calculate mean for each cluster value from the posterior samples
+
 
 partial_pooling_acluster_means = np.mean(partial_pooling_trace['a_cluster'], axis =0)
 partial_pooling_bs1_means = np.mean(partial_pooling_trace['bs1'], axis =0)
@@ -298,6 +233,7 @@ for hour, row in df.iterrows():
                                                                partial_pooling_bc5_means[cluster_idx] * daypart_fs_cos_5[hour] + \
                                                                partial_pooling_bth_means[heat_cluster_idx] * outdoor_temp_h[hour] + \
                                                                partial_pooling_btc_means[cool_cluster_idx] * outdoor_temp_c[hour])
+
 
 # Calculate prediction error
 predictions = np.exp(partial_pooling_predictions)
