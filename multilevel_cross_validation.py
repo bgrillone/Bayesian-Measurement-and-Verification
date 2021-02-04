@@ -64,7 +64,9 @@ kf = KFold(n_splits = 10)
 kf.get_n_splits(df)
 
 # Create array to save cross validation accuracy
-cv_accuracy = []
+nopooling_cv_accuracy = []
+partial_pooling_cv_accuracy = []
+
 
 for train_index, test_index in kf.split(df):
 
@@ -111,13 +113,13 @@ for train_index, test_index in kf.split(df):
         bc5 = pm.Normal("bc5", mu=0.0, sigma=1.0, dims="profile_cluster")
 
         # Expected value per county:
-        mu = a[daypart, profile_cluster_idx] + bs1[profile_cluster_idx] * fs_sin_1 + bs2[
-            profile_cluster_idx] * fs_sin_2 + \
-             bs3[profile_cluster_idx] * fs_sin_3 + bs4[profile_cluster_idx] * fs_sin_4 + \
-             bs5[profile_cluster_idx] * fs_sin_5 + bc1[profile_cluster_idx] * fs_cos_1 + \
-             bc2[profile_cluster_idx] * fs_cos_2 + bc3[profile_cluster_idx] * fs_cos_3 + \
-             bc4[profile_cluster_idx] * fs_cos_4 + bc5[profile_cluster_idx] * fs_cos_5 + \
-             btc[daypart, cool_temp_cluster_idx] * cooling_temp + bth[daypart, heat_temp_cluster_idx] * heating_temp
+        mu = a[daypart, profile_cluster_idx] + bs1[profile_cluster_idx] * fs_sin_1 + \
+             bs2[profile_cluster_idx] * fs_sin_2 + bs3[profile_cluster_idx] * fs_sin_3 + \
+             bs4[profile_cluster_idx] * fs_sin_4 + bs5[profile_cluster_idx] * fs_sin_5 + \
+             bc1[profile_cluster_idx] * fs_cos_1 + bc2[profile_cluster_idx] * fs_cos_2 + \
+             bc3[profile_cluster_idx] * fs_cos_3 + bc4[profile_cluster_idx] * fs_cos_4 + \
+             bc5[profile_cluster_idx] * fs_cos_5 + btc[daypart, cool_temp_cluster_idx] * cooling_temp + \
+             bth[daypart, heat_temp_cluster_idx] * heating_temp
 
         # Model error:
         sigma = pm.Exponential("sigma", 1.0)
@@ -147,7 +149,7 @@ for train_index, test_index in kf.split(df):
     no_pooling_bth_means = np.mean(no_pooling_trace['bth'], axis=0)
     no_pooling_btc_means = np.mean(no_pooling_trace['btc'], axis=0)
     # Create array with predictions
-    no_pooling_predictions = []
+    no_pooling_log_predictions = []
     # Create array with bounds
     no_pooling_hdi = az.hdi(no_pooling_idata)
     no_pooling_mean_lower = []
@@ -164,7 +166,7 @@ for train_index, test_index in kf.split(df):
                             if cool_clusters[hour] == cool_cluster_idx:
                                 for daypart_idx in unique_dayparts:
                                     if dayparts[hour] == daypart_idx:
-                                        no_pooling_predictions.append(no_pooling_a_means[daypart_idx, cluster_idx] + \
+                                        no_pooling_log_predictions.append(no_pooling_a_means[daypart_idx, cluster_idx] + \
                                                                       no_pooling_bs1_means[cluster_idx] *
                                                                       daypart_fs_sin_1[hour] + \
                                                                       no_pooling_bs2_means[cluster_idx] *
@@ -193,9 +195,135 @@ for train_index, test_index in kf.split(df):
                                                                       outdoor_temp_c[hour])
 
     # Calculate prediction error
-    predictions = np.exp(no_pooling_predictions)
-    mse = mean_squared_error(df.loc[test_index].total_electricity, predictions)
-    rmse = sqrt(mse)
-    cvrmse = rmse / df.total_electricity.mean()
-    cv_accuracy.append(cvrmse)
-    print(cv_accuracy)
+    nopooling_predictions = np.exp(no_pooling_log_predictions)
+    nopooling_mse = mean_squared_error(df.loc[test_index].total_electricity, nopooling_predictions)
+    nopooling_rmse = sqrt(nopooling_mse)
+    nopooling_cvrmse = nopooling_rmse / df.total_electricity.mean()
+    nopooling_cv_accuracy.append(nopooling_cvrmse)
+    print(nopooling_cv_accuracy)
+
+    with pm.Model(coords=coords) as partial_pooling:
+        profile_cluster_idx = pm.Data("profile_cluster_idx", clusters[train_index], dims="obs_id")
+        heat_temp_cluster_idx = pm.Data("heat_temp_cluster_idx", heat_clusters[train_index], dims="obs_id")
+        cool_temp_cluster_idx = pm.Data("cool_temp_cluster_idx", cool_clusters[train_index], dims="obs_id")
+        daypart = pm.Data("daypart", dayparts[train_index], dims="obs_id")
+
+        fs_sin_1 = pm.Data("fs_sin_1", daypart_fs_sin_1[train_index], dims="obs_id")
+        fs_sin_2 = pm.Data("fs_sin_2", daypart_fs_sin_2[train_index], dims="obs_id")
+        fs_sin_3 = pm.Data("fs_sin_3", daypart_fs_sin_3[train_index], dims="obs_id")
+        fs_sin_4 = pm.Data("fs_sin_4", daypart_fs_sin_4[train_index], dims="obs_id")
+        fs_sin_5 = pm.Data("fs_sin_5", daypart_fs_sin_5[train_index], dims="obs_id")
+        fs_cos_1 = pm.Data("fs_cos_1", daypart_fs_cos_1[train_index], dims="obs_id")
+        fs_cos_2 = pm.Data("fs_cos_2", daypart_fs_cos_2[train_index], dims="obs_id")
+        fs_cos_3 = pm.Data("fs_cos_3", daypart_fs_cos_3[train_index], dims="obs_id")
+        fs_cos_4 = pm.Data("fs_cos_4", daypart_fs_cos_4[train_index], dims="obs_id")
+        fs_cos_5 = pm.Data("fs_cos_5", daypart_fs_cos_5[train_index], dims="obs_id")
+
+        cooling_temp = pm.Data("cooling_temp", outdoor_temp_c[train_index], dims="obs_id")
+        heating_temp = pm.Data("heating_temp", outdoor_temp_h[train_index], dims="obs_id")
+
+        # Hyperpriors:
+        bf = pm.Normal("bf", mu=0.0, sigma=1.0)
+        sigma_bf = pm.Exponential("sigma_bf", 1.0)
+        a = pm.Normal("a", mu=0.0, sigma=1.0)
+        sigma_a = pm.Exponential("sigma_a", 1.0)
+
+        btc = pm.Normal("btc", mu=0.0, sigma=1.0, dims=("daypart", "cool_cluster"))
+        bth = pm.Normal("bth", mu=0.0, sigma=1.0, dims=("daypart", "heat_cluster"))
+
+        # Varying intercepts
+        a_cluster = pm.Normal("a_cluster", mu=a, sigma=sigma_a, dims=("daypart", "profile_cluster"))
+
+        # Varying slopes:
+        bs1 = pm.Normal("bs1", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+        bs2 = pm.Normal("bs2", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+        bs3 = pm.Normal("bs3", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+        bs4 = pm.Normal("bs4", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+        bs5 = pm.Normal("bs5", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+        bc1 = pm.Normal("bc1", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+        bc2 = pm.Normal("bc2", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+        bc3 = pm.Normal("bc3", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+        bc4 = pm.Normal("bc4", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+        bc5 = pm.Normal("bc5", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+
+        # Expected value per county:
+        mu = a_cluster[daypart, profile_cluster_idx] + bs1[profile_cluster_idx] * fs_sin_1 + bs2[
+            profile_cluster_idx] * fs_sin_2 + \
+             bs3[profile_cluster_idx] * fs_sin_3 + bs4[profile_cluster_idx] * fs_sin_4 + \
+             bs5[profile_cluster_idx] * fs_sin_5 + bc1[profile_cluster_idx] * fs_cos_1 + \
+             bc2[profile_cluster_idx] * fs_cos_2 + bc3[profile_cluster_idx] * fs_cos_3 + \
+             bc4[profile_cluster_idx] * fs_cos_4 + bc5[profile_cluster_idx] * fs_cos_5 + \
+             btc[daypart, cool_temp_cluster_idx] * cooling_temp + bth[daypart, heat_temp_cluster_idx] * heating_temp
+
+        # Model error:
+        sigma = pm.Exponential("sigma", 1.0)
+
+        y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity[train_index], dims="obs_id")
+
+    with partial_pooling:
+        approx = pm.fit(n=50000,
+                        method='fullrank_advi',
+                        callbacks=[CheckParametersConvergence(tolerance=0.01)])
+        partial_pooling_trace = approx.sample(1000)
+        partial_pooling_idata = az.from_pymc3(partial_pooling_trace)
+
+    # Calculate predictions
+    partial_pooling_acluster_means = np.mean(partial_pooling_trace['a_cluster'], axis=0)
+    partial_pooling_bs1_means = np.mean(partial_pooling_trace['bs1'], axis=0)
+    partial_pooling_bs2_means = np.mean(partial_pooling_trace['bs2'], axis=0)
+    partial_pooling_bs3_means = np.mean(partial_pooling_trace['bs3'], axis=0)
+    partial_pooling_bs4_means = np.mean(partial_pooling_trace['bs4'], axis=0)
+    partial_pooling_bs5_means = np.mean(partial_pooling_trace['bs5'], axis=0)
+    partial_pooling_bc1_means = np.mean(partial_pooling_trace['bc1'], axis=0)
+    partial_pooling_bc2_means = np.mean(partial_pooling_trace['bc2'], axis=0)
+    partial_pooling_bc3_means = np.mean(partial_pooling_trace['bc3'], axis=0)
+    partial_pooling_bc4_means = np.mean(partial_pooling_trace['bc4'], axis=0)
+    partial_pooling_bc5_means = np.mean(partial_pooling_trace['bc5'], axis=0)
+
+    partial_pooling_bth_means = np.mean(partial_pooling_trace['bth'], axis=0)
+    partial_pooling_btc_means = np.mean(partial_pooling_trace['btc'], axis=0)
+    # Create array with predictions
+    partial_pooling_log_predictions = []
+    # Create array with bounds
+    partial_pooling_hdi = az.hdi(partial_pooling_idata)
+    partial_pooling_mean_lower = []
+    partial_pooling_mean_higher = []
+    partial_pooling_lower = []
+    partial_pooling_higher = []
+
+    for hour, row in df.loc[test_index].iterrows():
+        for cluster_idx in unique_clusters:
+            if clusters[hour] == cluster_idx:
+                for heat_cluster_idx in unique_heat_clusters:
+                    if heat_clusters[hour] == heat_cluster_idx:
+                        for cool_cluster_idx in unique_cool_clusters:
+                            if cool_clusters[hour] == cool_cluster_idx:
+                                for daypart_idx in unique_dayparts:
+                                    if dayparts[hour] == daypart_idx:
+                                        partial_pooling_log_predictions.append(
+                                            partial_pooling_acluster_means[daypart_idx, cluster_idx] + \
+                                            partial_pooling_bs1_means[cluster_idx] * daypart_fs_sin_1[hour] + \
+                                            partial_pooling_bs2_means[cluster_idx] * daypart_fs_sin_2[hour] + \
+                                            partial_pooling_bs3_means[cluster_idx] * daypart_fs_sin_3[hour] + \
+                                            partial_pooling_bs4_means[cluster_idx] * daypart_fs_sin_4[hour] + \
+                                            partial_pooling_bs5_means[cluster_idx] * daypart_fs_sin_5[hour] + \
+                                            partial_pooling_bc1_means[cluster_idx] * daypart_fs_cos_1[hour] + \
+                                            partial_pooling_bc2_means[cluster_idx] * daypart_fs_cos_2[hour] + \
+                                            partial_pooling_bc3_means[cluster_idx] * daypart_fs_cos_3[hour] + \
+                                            partial_pooling_bc4_means[cluster_idx] * daypart_fs_cos_4[hour] + \
+                                            partial_pooling_bc5_means[cluster_idx] * daypart_fs_cos_5[hour] + \
+                                            partial_pooling_bth_means[daypart_idx, heat_cluster_idx] * outdoor_temp_h[
+                                                hour] + \
+                                            partial_pooling_btc_means[daypart_idx, cool_cluster_idx] * outdoor_temp_c[
+                                                hour])
+
+    # Calculate prediction error
+    partial_pooling_predictions = np.exp(partial_pooling_log_predictions)
+    partial_pooling_mse = mean_squared_error(df.loc[test_index].total_electricity, partial_pooling_predictions)
+    partial_pooling_rmse = sqrt(partial_pooling_mse)
+    partial_pooling_cvrmse = partial_pooling_rmse / df.total_electricity.mean()
+    partial_pooling_cv_accuracy.append(partial_pooling_cvrmse)
+    print(partial_pooling_cv_accuracy)
+
+avg_pp_accuracy = np.mean(partial_pooling_cv_accuracy)
+avg_np_accuracy = np.mean(nopooling_cv_accuracy)
