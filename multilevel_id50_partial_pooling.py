@@ -5,11 +5,11 @@ from bokeh.plotting import figure, output_file, show
 import numpy as np
 import pandas as pd
 import pymc3 as pm
+from pymc3.variational.callbacks import CheckParametersConvergence
 import xarray as xr
 import warnings
 from sklearn.metrics import mean_squared_error
 from math import sqrt
-from pymc3.variational.callbacks import CheckParametersConvergence
 
 
 RANDOM_SEED = 8924
@@ -178,12 +178,7 @@ partial_pooling_bth_means = np.mean(partial_pooling_trace['bth'], axis = 0)
 partial_pooling_btc_means = np.mean(partial_pooling_trace['btc'], axis = 0)
 # Create array with predictions
 partial_pooling_predictions = []
-# Create array with bounds
-partial_pooling_hdi = az.hdi(partial_pooling_idata)
-partial_pooling_mean_lower = []
-partial_pooling_mean_higher= []
-partial_pooling_lower = []
-partial_pooling_higher= []
+
 
 for hour, row in df.iterrows():
     for cluster_idx in unique_clusters:
@@ -240,8 +235,8 @@ show(p2)
 
 p3 = figure(plot_width=800, plot_height=400)
 
-p3.line(df.index, predictions, color="navy", alpha=0.8)
-p3.line(df.index, df.total_electricity, color="orange", alpha=0.8)
+p3.line(df.t, predictions, color="navy", alpha=0.8)
+p3.line(df.t, df.total_electricity, color="orange", alpha=0.6)
 show(p3)
 
 # Temperature varying predictions vs real log scale and normal scale
@@ -259,5 +254,80 @@ p5.circle(df.outdoor_temp, df.total_electricity, size=5, color="orange", alpha=0
 # show the results
 show(p5)
 
+# Uncertainty and coverage test
+
+# Create array with bounds
+partial_pooling_hdi = az.hdi(partial_pooling_idata)
+partial_pooling_mean_lower = []
+partial_pooling_mean_higher= []
+partial_pooling_lower = []
+partial_pooling_higher= []
 
 
+for hour, row in df.iterrows():
+    for cluster_idx in unique_clusters:
+        if clusters[hour] == cluster_idx:
+            for heat_cluster_idx in unique_heat_clusters:
+                if heat_clusters[hour] == heat_cluster_idx:
+                    for cool_cluster_idx in unique_cool_clusters:
+                        if cool_clusters[hour] == cool_cluster_idx:
+                            for daypart_idx in unique_dayparts:
+                                if dayparts[hour] == daypart_idx:
+                                    print(hour)
+                                    partial_pooling_lower.append( partial_pooling_hdi['a_cluster'][daypart_idx, cluster_idx].sel(hdi='lower').values + \
+                                        partial_pooling_hdi['bs1'][cluster_idx].sel(hdi='lower').values * daypart_fs_sin_1[hour] + \
+                                        partial_pooling_hdi['bs2'][cluster_idx].sel(hdi='lower').values * daypart_fs_sin_2[hour] + \
+                                        partial_pooling_hdi['bs3'][cluster_idx].sel(hdi='lower').values * daypart_fs_sin_3[hour] + \
+                                        partial_pooling_hdi['bs4'][cluster_idx].sel(hdi='lower').values * daypart_fs_sin_4[hour] + \
+                                        partial_pooling_hdi['bs5'][cluster_idx].sel(hdi='lower').values * daypart_fs_sin_5[hour] + \
+                                        partial_pooling_hdi['bc1'][cluster_idx].sel(hdi='lower').values * daypart_fs_cos_1[hour] + \
+                                        partial_pooling_hdi['bc2'][cluster_idx].sel(hdi='lower').values * daypart_fs_cos_2[hour] + \
+                                        partial_pooling_hdi['bc3'][cluster_idx].sel(hdi='lower').values * daypart_fs_cos_3[hour] + \
+                                        partial_pooling_hdi['bc4'][cluster_idx].sel(hdi='lower').values * daypart_fs_cos_4[hour] + \
+                                        partial_pooling_hdi['bc5'][cluster_idx].sel(hdi='lower').values * daypart_fs_cos_5[hour] +  \
+                                        partial_pooling_hdi['bth'][daypart_idx, heat_cluster_idx].sel(hdi='lower').values * outdoor_temp_h[hour]+ \
+                                        partial_pooling_hdi['btc'][daypart_idx, cool_cluster_idx].sel(hdi='lower').values * outdoor_temp_c[hour] - \
+                                        partial_pooling_hdi['sigma'].sel(hdi='higher').values)
+
+
+                                    partial_pooling_higher.append(partial_pooling_hdi['a_cluster'][daypart_idx, cluster_idx].sel(hdi='higher').values + \
+                                                                partial_pooling_hdi['bs1'][cluster_idx].sel(hdi='higher').values * daypart_fs_sin_1[hour] + \
+                                                                partial_pooling_hdi['bs2'][cluster_idx].sel(hdi='higher').values * daypart_fs_sin_2[hour] + \
+                                                                partial_pooling_hdi['bs3'][cluster_idx].sel(hdi='higher').values * daypart_fs_sin_3[hour] + \
+                                                                partial_pooling_hdi['bs4'][cluster_idx].sel(hdi='higher').values * daypart_fs_sin_4[hour] + \
+                                                                partial_pooling_hdi['bs5'][cluster_idx].sel(hdi='higher').values * daypart_fs_sin_5[hour] + \
+                                                                partial_pooling_hdi['bc1'][cluster_idx].sel(hdi='higher').values * daypart_fs_cos_1[hour] + \
+                                                                partial_pooling_hdi['bc2'][cluster_idx].sel(hdi='higher').values * daypart_fs_cos_2[hour] + \
+                                                                partial_pooling_hdi['bc3'][cluster_idx].sel(hdi='higher').values * daypart_fs_cos_3[hour] + \
+                                                                partial_pooling_hdi['bc4'][cluster_idx].sel(hdi='higher').values * daypart_fs_cos_4[hour] + \
+                                                                partial_pooling_hdi['bc5'][cluster_idx].sel(hdi='higher').values * daypart_fs_cos_5[hour] + \
+                                                                partial_pooling_hdi['bth'][daypart_idx, heat_cluster_idx].sel(hdi='higher').values * outdoor_temp_h[hour] + \
+                                                                partial_pooling_hdi['btc'][daypart_idx, cool_cluster_idx].sel(hdi='higher').values * outdoor_temp_c[hour] + \
+                                                                partial_pooling_hdi['sigma'].sel(hdi='higher').values)
+
+
+pp_higher = np.exp(partial_pooling_higher)
+pp_lower = np.exp(partial_pooling_lower)
+p6 = figure(plot_width=800, plot_height=400, x_axis_type = 'datetime')
+
+p6.line(df.t, predictions, color="navy", alpha=0.8)
+p6.line(df.t, df.total_electricity, color="orange", alpha=0.6)
+p6.varea(x = df.t, y1 = pp_lower, y2 = pp_higher, color = 'gray', alpha = 0.2)
+show(p6)
+
+partial_pooling_lower.values()
+
+coverage = np.where(df.total_electricity <= pp_higher, np.where(predictions>= pp_lower, 1,0), 0)
+
+coverage_perc = sum(coverage) * 100 / len(coverage)
+
+# Debug uncertainty spikes
+
+p7 = figure(plot_width=800, plot_height=400, x_axis_type = 'datetime')
+
+
+p7.line(df.t, df.temp_c_cluster*10000, color='navy', alpha=0.8)
+p7.line(df.t, df.daypart*10000, color = 'red', alpha = 0.5)
+p7.line(df.t, predictions, color = 'black')
+p7.varea(x = df.t, y1 = pp_lower, y2 = pp_higher, color = 'gray', alpha = 0.2)
+show(p7)
