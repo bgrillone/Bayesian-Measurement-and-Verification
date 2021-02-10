@@ -1,7 +1,7 @@
 import arviz  as az
 import matplotlib.pyplot as plt
 from bokeh.layouts import gridplot
-from bokeh.plotting import figure, output_file, show
+from bokeh.plotting import figure, output_file, show, save
 import numpy as np
 import pandas as pd
 import pymc3 as pm
@@ -10,6 +10,7 @@ import xarray as xr
 import warnings
 from sklearn.metrics import mean_squared_error
 from math import sqrt
+
 
 
 RANDOM_SEED = 8924
@@ -47,12 +48,11 @@ hist_l, edges_l = np.histogram(measured_log, density = True, bins = 50)
 x_l = np.linspace (0, 12, num=20)
 p2 = make_plot("Log Electricity Hist", hist_l, edges_l, x_l)
 show(gridplot([p1,p2], ncols = 2))
-
 # They're not normal, even after logging but what we really need to check is that the error is normal
 
 
 # Create local variables (clusters need to start from 0)
-# Daypart 06 17 24
+
 df.t = pd.to_datetime(pd.Series(df.t))
 df["daypart"] = np.where(df['t'].dt.hour <= 19,
                          np.where(df['t'].dt.hour <= 15,
@@ -147,6 +147,7 @@ with pm.Model(coords=coords) as partial_pooling:
     # Model error:
     sigma = pm.Exponential("sigma", 1.0)
 
+    #Likelihood
     y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity, dims="obs_id")
 
 #Fitting without sampling
@@ -213,27 +214,29 @@ cvrmse = rmse/df.total_electricity.mean()
 # PLOTS
 
 # output to static HTML file
-output_file("predictions.html")
+output_file("predictions2.html")
+
 
 
 # predictions vs real log scale
-p = figure(plot_width=800, plot_height=400)
+p = figure(plot_width=800, plot_height=400, x_axis_type = 'datetime')
 
-p.circle(df.index, partial_pooling_predictions, size=5, color="navy", alpha=0.5)
-p.circle(df.index, log_electricity, size=5, color="orange", alpha=0.2)
+p.circle(df.t, partial_pooling_predictions, size=5, color="navy", alpha=0.5)
+p.circle(df.t, log_electricity, size=5, color="orange", alpha=0.2)
 show(p)
-
+save(p)
 # predictions vs real
 
-p2 = figure(plot_width=800, plot_height=400)
+p2 = figure(plot_width=800, plot_height=400, x_axis_type = 'datetime')
 
-p2.circle(df.index, predictions, size=5, color="navy", alpha=0.5)
-p2.circle(df.index, df.total_electricity, size = 5, color="orange", alpha=0.2)
+p2.circle(df.t, predictions, size=5, color="navy", alpha=0.5)
+p2.circle(df.t, df.total_electricity, size = 5, color="orange", alpha=0.2)
 show(p2)
+save(p2)
 
 # predictions vs real lineplot
 
-p3 = figure(plot_width=800, plot_height=400)
+p3 = figure(plot_width=800, plot_height=400, x_axis_type = 'datetime')
 
 p3.line(df.t, predictions, color="navy", alpha=0.8)
 p3.line(df.t, df.total_electricity, color="orange", alpha=0.6)
@@ -257,14 +260,14 @@ show(p5)
 # Uncertainty and coverage test
 
 # Create array with bounds
-partial_pooling_hdi = az.hdi(partial_pooling_idata)
+partial_pooling_hdi = az.hdi(partial_pooling_idata, hdi_prob= 0.9)
 partial_pooling_mean_lower = []
 partial_pooling_mean_higher= []
 partial_pooling_lower = []
 partial_pooling_higher= []
 
 
-for hour, row in df.iterrows():
+for hour, row  in df.iterrows():
     for cluster_idx in unique_clusters:
         if clusters[hour] == cluster_idx:
             for heat_cluster_idx in unique_heat_clusters:
@@ -308,14 +311,19 @@ for hour, row in df.iterrows():
 
 pp_higher = np.exp(partial_pooling_higher)
 pp_lower = np.exp(partial_pooling_lower)
+
+
+p6 = figure(plot_width=800, plot_height=400)
+p6.line(df.index[8000:12000], predictions[8000:12000], color="navy", alpha=0.8)
+p6.varea(df.index[8000:12000], y1 = pp_lower, y2 = pp_higher, color = 'gray', alpha = 0.2)
+show(p6)
+
 p6 = figure(plot_width=800, plot_height=400, x_axis_type = 'datetime')
 
 p6.line(df.t, predictions, color="navy", alpha=0.8)
 p6.line(df.t, df.total_electricity, color="orange", alpha=0.6)
 p6.varea(x = df.t, y1 = pp_lower, y2 = pp_higher, color = 'gray', alpha = 0.2)
 show(p6)
-
-partial_pooling_lower.values()
 
 coverage = np.where(df.total_electricity <= pp_higher, np.where(predictions>= pp_lower, 1,0), 0)
 
@@ -331,3 +339,95 @@ p7.line(df.t, df.daypart*10000, color = 'red', alpha = 0.5)
 p7.line(df.t, predictions, color = 'black')
 p7.varea(x = df.t, y1 = pp_lower, y2 = pp_higher, color = 'gray', alpha = 0.2)
 show(p7)
+
+
+# Let's analyse what causes the uncertainty spike between 10/08/2017 09:00 (12146) and 10/08/2017 13:00 (12150)
+
+
+higher_morning = np.exp(partial_pooling_hdi['a_cluster'][2, 3].sel(hdi='higher').values + \
+                                                                partial_pooling_hdi['bs1'][3].sel(hdi='higher').values * daypart_fs_sin_1[12146] + \
+                                                                partial_pooling_hdi['bs2'][3].sel(hdi='higher').values * daypart_fs_sin_2[12146] + \
+                                                                partial_pooling_hdi['bs3'][3].sel(hdi='higher').values * daypart_fs_sin_3[12146] + \
+                                                                partial_pooling_hdi['bs4'][3].sel(hdi='higher').values * daypart_fs_sin_4[12146] + \
+                                                                partial_pooling_hdi['bs5'][3].sel(hdi='higher').values * daypart_fs_sin_5[12146] + \
+                                                                partial_pooling_hdi['bc1'][3].sel(hdi='higher').values * daypart_fs_cos_1[12146] + \
+                                                                partial_pooling_hdi['bc2'][3].sel(hdi='higher').values * daypart_fs_cos_2[12146] + \
+                                                                partial_pooling_hdi['bc3'][3].sel(hdi='higher').values * daypart_fs_cos_3[12146] + \
+                                                                partial_pooling_hdi['bc4'][3].sel(hdi='higher').values * daypart_fs_cos_4[12146] + \
+                                                                partial_pooling_hdi['bc5'][3].sel(hdi='higher').values * daypart_fs_cos_5[12146] + \
+                                                                partial_pooling_hdi['bth'][2, 2].sel(hdi='higher').values * outdoor_temp_h[12146] + \
+                                                                partial_pooling_hdi['btc'][2, 0].sel(hdi='higher').values * outdoor_temp_c[12146] + \
+                                                                partial_pooling_hdi['sigma'].sel(hdi='higher').values)
+
+lower_morning = np.exp(partial_pooling_hdi['a_cluster'][2, 3].sel(hdi='lower').values + \
+                                        partial_pooling_hdi['bs1'][3].sel(hdi='lower').values * daypart_fs_sin_1[12146] + \
+                                        partial_pooling_hdi['bs2'][3].sel(hdi='lower').values * daypart_fs_sin_2[12146] + \
+                                        partial_pooling_hdi['bs3'][3].sel(hdi='lower').values * daypart_fs_sin_3[12146] + \
+                                        partial_pooling_hdi['bs4'][3].sel(hdi='lower').values * daypart_fs_sin_4[12146] + \
+                                        partial_pooling_hdi['bs5'][3].sel(hdi='lower').values * daypart_fs_sin_5[12146] + \
+                                        partial_pooling_hdi['bc1'][3].sel(hdi='lower').values * daypart_fs_cos_1[12146] + \
+                                        partial_pooling_hdi['bc2'][3].sel(hdi='lower').values * daypart_fs_cos_2[12146] + \
+                                        partial_pooling_hdi['bc3'][3].sel(hdi='lower').values * daypart_fs_cos_3[12146] + \
+                                        partial_pooling_hdi['bc4'][3].sel(hdi='lower').values * daypart_fs_cos_4[12146] + \
+                                        partial_pooling_hdi['bc5'][3].sel(hdi='lower').values * daypart_fs_cos_5[12146] +  \
+                                        partial_pooling_hdi['bth'][2, 2].sel(hdi='lower').values * outdoor_temp_h[12146]+ \
+                                        partial_pooling_hdi['btc'][2, 0].sel(hdi='lower').values * outdoor_temp_c[12146] - \
+                                        partial_pooling_hdi['sigma'].sel(hdi='higher').values)
+
+mean_morning = np.exp(partial_pooling_acluster_means[2, 3] + \
+                                                                       partial_pooling_bs1_means[3] * daypart_fs_sin_1[12146] + \
+                                                                       partial_pooling_bs2_means[3] * daypart_fs_sin_2[12146] + \
+                                                                       partial_pooling_bs3_means[3] * daypart_fs_sin_3[12146] + \
+                                                                       partial_pooling_bs4_means[3] * daypart_fs_sin_4[12146] + \
+                                                                       partial_pooling_bs5_means[3] * daypart_fs_sin_5[12146] + \
+                                                                       partial_pooling_bc1_means[3] * daypart_fs_cos_1[12146] + \
+                                                                       partial_pooling_bc2_means[3] * daypart_fs_cos_2[12146] + \
+                                                                       partial_pooling_bc3_means[3] * daypart_fs_cos_3[12146] + \
+                                                                       partial_pooling_bc4_means[3] * daypart_fs_cos_4[12146] + \
+                                                                       partial_pooling_bc5_means[3] * daypart_fs_cos_5[12146] + \
+                                                                       partial_pooling_bth_means[2, 2] * outdoor_temp_h[12146] + \
+                                                                       partial_pooling_btc_means[2, 0] * outdoor_temp_c[12146])
+
+higher_lunch = np.exp(partial_pooling_hdi['a_cluster'][3, 3].sel(hdi='higher').values + \
+                                                                partial_pooling_hdi['bs1'][3].sel(hdi='higher').values * daypart_fs_sin_1[12150] + \
+                                                                partial_pooling_hdi['bs2'][3].sel(hdi='higher').values * daypart_fs_sin_2[12150] + \
+                                                                partial_pooling_hdi['bs3'][3].sel(hdi='higher').values * daypart_fs_sin_3[12150] + \
+                                                                partial_pooling_hdi['bs4'][3].sel(hdi='higher').values * daypart_fs_sin_4[12150] + \
+                                                                partial_pooling_hdi['bs5'][3].sel(hdi='higher').values * daypart_fs_sin_5[12150] + \
+                                                                partial_pooling_hdi['bc1'][3].sel(hdi='higher').values * daypart_fs_cos_1[12150] + \
+                                                                partial_pooling_hdi['bc2'][3].sel(hdi='higher').values * daypart_fs_cos_2[12150] + \
+                                                                partial_pooling_hdi['bc3'][3].sel(hdi='higher').values * daypart_fs_cos_3[12150] + \
+                                                                partial_pooling_hdi['bc4'][3].sel(hdi='higher').values * daypart_fs_cos_4[12150] + \
+                                                                partial_pooling_hdi['bc5'][3].sel(hdi='higher').values * daypart_fs_cos_5[12150] + \
+                                                                partial_pooling_hdi['bth'][3, 2].sel(hdi='higher').values * outdoor_temp_h[12150] + \
+                                                                partial_pooling_hdi['btc'][3, 0].sel(hdi='higher').values * outdoor_temp_c[12150] + \
+                                                                partial_pooling_hdi['sigma'].sel(hdi='higher').values)
+
+lower_lunch = np.exp(partial_pooling_hdi['a_cluster'][3, 3].sel(hdi='lower').values + \
+                                        partial_pooling_hdi['bs1'][3].sel(hdi='lower').values * daypart_fs_sin_1[12150] + \
+                                        partial_pooling_hdi['bs2'][3].sel(hdi='lower').values * daypart_fs_sin_2[12150] + \
+                                        partial_pooling_hdi['bs3'][3].sel(hdi='lower').values * daypart_fs_sin_3[12150] + \
+                                        partial_pooling_hdi['bs4'][3].sel(hdi='lower').values * daypart_fs_sin_4[12150] + \
+                                        partial_pooling_hdi['bs5'][3].sel(hdi='lower').values * daypart_fs_sin_5[12150] + \
+                                        partial_pooling_hdi['bc1'][3].sel(hdi='lower').values * daypart_fs_cos_1[12150] + \
+                                        partial_pooling_hdi['bc2'][3].sel(hdi='lower').values * daypart_fs_cos_2[12150] + \
+                                        partial_pooling_hdi['bc3'][3].sel(hdi='lower').values * daypart_fs_cos_3[12150] + \
+                                        partial_pooling_hdi['bc4'][3].sel(hdi='lower').values * daypart_fs_cos_4[12150] + \
+                                        partial_pooling_hdi['bc5'][3].sel(hdi='lower').values * daypart_fs_cos_5[12150] +  \
+                                        partial_pooling_hdi['bth'][3, 2].sel(hdi='lower').values * outdoor_temp_h[12150]+ \
+                                        partial_pooling_hdi['btc'][3, 0].sel(hdi='lower').values * outdoor_temp_c[12150] - \
+                                        partial_pooling_hdi['sigma'].sel(hdi='higher').values)
+
+mean_lunch = np.exp(partial_pooling_acluster_means[3, 3] + \
+                                                                       partial_pooling_bs1_means[3] * daypart_fs_sin_1[12150] + \
+                                                                       partial_pooling_bs2_means[3] * daypart_fs_sin_2[12150] + \
+                                                                       partial_pooling_bs3_means[3] * daypart_fs_sin_3[12150] + \
+                                                                       partial_pooling_bs4_means[3] * daypart_fs_sin_4[12150] + \
+                                                                       partial_pooling_bs5_means[3] * daypart_fs_sin_5[12150] + \
+                                                                       partial_pooling_bc1_means[3] * daypart_fs_cos_1[12150] + \
+                                                                       partial_pooling_bc2_means[3] * daypart_fs_cos_2[12150] + \
+                                                                       partial_pooling_bc3_means[3] * daypart_fs_cos_3[12150] + \
+                                                                       partial_pooling_bc4_means[3] * daypart_fs_cos_4[12150] + \
+                                                                       partial_pooling_bc5_means[3] * daypart_fs_cos_5[12150] + \
+                                                                       partial_pooling_bth_means[3, 2] * outdoor_temp_h[12150]+ \
+                                                                       partial_pooling_btc_means[3, 0] * outdoor_temp_c[12150])
