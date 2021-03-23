@@ -20,7 +20,6 @@ from math import sqrt
 RANDOM_SEED = 8924
 
 # Data import
-# df = pd.read_csv("/root/benedetto/data/Id50_preprocessed2.csv", index_col = 0)
 df = pd.read_csv("/Users/beegroup/Github/Bayes-M&V/data/Id50_preprocessed2.csv", index_col=0)
 
 # Preprocessing
@@ -1070,7 +1069,6 @@ export_dict = {'cvrmse' : cvrmse, 'coverage' : coverage, 'models' : models}
 
 df = pd.DataFrame(data = export_dict)
 
-# df.to_csv("/root/benedetto/results/optimization.csv")
 df.to_csv("optimization.csv")
 
 # Export plots

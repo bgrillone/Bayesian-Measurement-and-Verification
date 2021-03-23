@@ -20,8 +20,7 @@ from math import sqrt
 RANDOM_SEED = 8924
 
 # Data import
-# df = pd.read_csv("/root/benedetto/data/Id50_preprocessed2.csv", index_col = 0)
-df = pd.read_csv("/Users/beegroup/Github/Bayes-M&V/data/Id50_preprocessed2.csv", index_col=0)
+df = pd.read_csv("/root/benedetto/data/Id50_preprocessed2.csv", index_col = 0)
 
 # Preprocessing
 df["log_v"] = log_electricity = np.log(df["total_electricity"]).values
@@ -156,7 +155,7 @@ for train_index, test_index in kf.split(df):
         model_1_trace = approx.sample(1000)
         model_1_idata = az.from_pymc3(model_1_trace)
         az.plot_trace(model_1_idata)
-        plt.save('results/plots/model_1_trace.png')
+        plt.savefig('results/plots/model_1_trace.png')
 
     model_1_a_means = np.mean(model_1_trace['a'], axis=0)
     model_1_bs1_means = np.mean(model_1_trace['bs1'], axis=0)
@@ -357,7 +356,7 @@ for train_index, test_index in kf.split(df):
         model_2_trace = approx.sample(1000)
         model_2_idata = az.from_pymc3(model_2_trace)
         az.plot_trace(model_2_idata)
-        plt.save('results/plots/model_2_trace.png')
+        plt.savefig('results/plots/model_2_trace.png')
 
     # Calculate predictions
     model_2_acluster_means = np.mean(model_2_trace['a_cluster'], axis=0)
@@ -549,7 +548,7 @@ for train_index, test_index in kf.split(df):
         model_3_trace = approx.sample(1000)
         model_3_idata = az.from_pymc3(model_3_trace)
         az.plot_trace(model_3_idata)
-        plt.save('results/plots/model_3_trace.png')
+        plt.savefig('results/plots/model_3_trace.png')
 
     # Calculate predictions
     model_3_acluster_means = np.mean(model_3_trace['a_cluster'], axis=0)
@@ -742,7 +741,7 @@ for train_index, test_index in kf.split(df):
         model_4_trace = approx.sample(1000)
         model_4_idata = az.from_pymc3(model_4_trace)
         az.plot_trace(model_4_idata)
-        plt.save('results/plots/model_4_trace.png')
+        plt.savefig('results/plots/model_4_trace.png')
 
     # Calculate predictions
     model_4_acluster_means = np.mean(model_4_trace['a_cluster'], axis=0)
@@ -937,7 +936,7 @@ for train_index, test_index in kf.split(df):
         model_5_trace = approx.sample(1000)
         model_5_idata = az.from_pymc3(model_5_trace)
         az.plot_trace(model_5_idata)
-        plt.save('results/plots/model_5_trace.png')
+        plt.savefig('results/plots/model_5_trace.png')
 
     # Calculate predictions
     model_5_acluster_means = np.mean(model_5_trace['a_cluster'], axis=0)
@@ -1070,8 +1069,7 @@ export_dict = {'cvrmse' : cvrmse, 'coverage' : coverage, 'models' : models}
 
 df = pd.DataFrame(data = export_dict)
 
-# df.to_csv("/root/benedetto/results/optimization.csv")
-df.to_csv("optimization.csv")
+df.to_csv("/root/benedetto/results/optimization.csv")
 
 # Export plots
 output_file("results/plots/predictions_1.html")
@@ -1080,7 +1078,7 @@ p1 = figure(plot_width=800, plot_height=400, x_axis_type = 'datetime')
 p1.line(df.t[test_index], model_1_predictions, color="navy", alpha=0.8)
 p1.line(df.t[test_index], df.total_electricity[test_index], color="orange", alpha=0.6)
 p1.varea(x = df.t[test_index], y1 = model_1_lower, y2 = model_1_higher, color = 'gray', alpha = 0.2)
-save(p1)
+savefig(p1)
 
 output_file("results/plots/predictions_2.html")
 p2 = figure(plot_width=800, plot_height=400, x_axis_type = 'datetime')
@@ -1088,7 +1086,7 @@ p2 = figure(plot_width=800, plot_height=400, x_axis_type = 'datetime')
 p2.line(df.t[test_index], model_2_predictions, color="navy", alpha=0.8)
 p2.line(df.t[test_index], df.total_electricity[test_index], color="orange", alpha=0.6)
 p2.varea(x = df.t[test_index], y1 = model_2_lower, y2 = model_2_higher, color = 'gray', alpha = 0.2)
-save(p2)
+savefig(p2)
 
 output_file("results/plots/predictions_3.html")
 p3 = figure(plot_width=800, plot_height=400, x_axis_type = 'datetime')
@@ -1096,7 +1094,7 @@ p3 = figure(plot_width=800, plot_height=400, x_axis_type = 'datetime')
 p3.line(df.t[test_index], model_3_predictions, color="navy", alpha=0.8)
 p3.line(df.t[test_index], df.total_electricity[test_index], color="orange", alpha=0.6)
 p3.varea(x = df.t[test_index], y1 = model_3_lower, y2 = model_3_higher, color = 'gray', alpha = 0.2)
-save(p3)
+savefig(p3)
 
 output_file("results/plots/predictions_4.html")
 p4 = figure(plot_width=800, plot_height=400, x_axis_type = 'datetime')
@@ -1104,7 +1102,7 @@ p4 = figure(plot_width=800, plot_height=400, x_axis_type = 'datetime')
 p4.line(df.t[test_index], model_4_predictions, color="navy", alpha=0.8)
 p4.line(df.t[test_index], df.total_electricity[test_index], color="orange", alpha=0.6)
 p4.varea(x = df.t[test_index], y1 = model_4_lower, y2 = model_4_higher, color = 'gray', alpha = 0.2)
-save(p4)
+savefig(p4)
 
 output_file("results/plots/predictions_5.html")
 p5 = figure(plot_width=800, plot_height=400, x_axis_type = 'datetime')
@@ -1112,4 +1110,4 @@ p5 = figure(plot_width=800, plot_height=400, x_axis_type = 'datetime')
 p5.line(df.t[test_index], model_5_predictions, color="navy", alpha=0.8)
 p5.line(df.t[test_index], df.total_electricity[test_index], color="orange", alpha=0.6)
 p5.varea(x = df.t[test_index], y1 = model_5_lower, y2 = model_5_higher, color = 'gray', alpha = 0.2)
-save(p5)
+savefig(p5)
