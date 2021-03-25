@@ -1,31 +1,22 @@
 import arviz  as az
-import matplotlib.pyplot as plt
 from bokeh.layouts import gridplot
 from bokeh.plotting import figure, output_file, show, save
 import numpy as np
 import pandas as pd
 import pymc3 as pm
 from pymc3.variational.callbacks import CheckParametersConvergence
-import xarray as xr
-import warnings
 from sklearn.metrics import mean_squared_error
 from math import sqrt
-
-
 
 RANDOM_SEED = 8924
 
 # Data import
-df = pd.read_csv("/Users/beegroup/Github/Bayes-M&V/data/Id50_preprocessed2.csv", index_col = 0)
+df = pd.read_csv("~/Github/Bayes-M&V/data/Id50_preprocessed2.csv", index_col = 0)
 
-# Check if there's NAs
-df.isna().sum()
-
-# Preprocessing
+# Plotting data hist
 df["log_v"] = log_electricity = np.log(df["total_electricity"]).values
 total_electricity = df.total_electricity.values
 
-# Plotting data
 measured = df[np.isfinite(df["total_electricity"])].total_electricity
 hist, edges = np.histogram(measured, density = True, bins = 50)
 
@@ -48,10 +39,11 @@ hist_l, edges_l = np.histogram(measured_log, density = True, bins = 50)
 x_l = np.linspace (0, 12, num=20)
 p2 = make_plot("Log Electricity Hist", hist_l, edges_l, x_l)
 show(gridplot([p1,p2], ncols = 2))
-# They're not normal, even after logging but what we really need to check is that the error is normal
 
 
-# Create local variables (clusters need to start from 0)
+# Create local variables (assign daypart, cluster values need to start from 0)
+# clusters are use profile categories, heat_clusters and cool_clusters indicate days having similar
+# temperature dependence (likely to modify this in the new version of the preprocessing)
 
 df.t = pd.to_datetime(pd.Series(df.t))
 df["daypart"] = np.where(df['t'].dt.hour <= 19,
@@ -83,14 +75,15 @@ daypart_fs_cos_3 = df.daypart_fs_cos_3
 daypart_fs_cos_4 = df.daypart_fs_cos_4
 daypart_fs_cos_5 = df.daypart_fs_cos_5
 
+# create coords for pymc3
 coords = {"obs_id": np.arange(temperature.size)}
 coords["profile_cluster"] = unique_clusters
 coords["heat_cluster"] = unique_heat_clusters
 coords["cool_cluster"] = unique_cool_clusters
 coords["daypart"] = unique_dayparts
 
-
-# Intercept, Fourier, temperatures, with profile and temperature clustering
+# Bayesian linear model with Intercept, Fourier series for the seasonal features,
+# temperatures, pooled on profile and temperature clustering
 
 with pm.Model(coords=coords) as partial_pooling:
     profile_cluster_idx = pm.Data("profile_cluster_idx", clusters, dims="obs_id")
@@ -150,7 +143,7 @@ with pm.Model(coords=coords) as partial_pooling:
     #Likelihood
     y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity, dims="obs_id")
 
-#Fitting without sampling
+#Fitting
 with partial_pooling:
     approx = pm.fit(n=50000,
                     method='fullrank_advi',
@@ -158,7 +151,7 @@ with partial_pooling:
     partial_pooling_trace = approx.sample(1000)
     partial_pooling_idata = az.from_pymc3(partial_pooling_trace)
 
-#Calculate predictions with sampling method:
+# Sampling from the posterior
 
 with partial_pooling:
 
@@ -175,40 +168,37 @@ with partial_pooling:
 
     partial_pooling_idata = az.from_pymc3(partial_pooling_trace, prior = prior, posterior_predictive = posterior)
 
-# Calculate HDI and plot predictions and HDI
+# Calculate predictions and HDI
 
 predictions = np.exp(posterior['y'].mean(0))
 hdi_data = az.hdi(posterior_hdi)
 lower_bound = np.array(np.exp(hdi_data.to_array().sel(hdi = 'lower'))).flatten()
 higher_bound = np.array(np.exp(hdi_data.to_array().sel(hdi = 'higher'))).flatten()
+
+# Calculate cvrmse and coverage of the HDI
+mse = mean_squared_error(df.total_electricity, predictions)
+rmse = sqrt(mse)
+cvrmse = rmse/df.total_electricity.mean()
+coverage = sum((lower_bound <= df.total_electricity) & (df.total_electricity <= higher_bound)) * 100 / len(df)
+
+# PLOTS
+
+# output to static HTML file
+output_file("predictions.html")
+
+# Plot real consumption, predicted consumption, HDI
 p1 = figure(plot_width=800, plot_height=400,  x_axis_type = 'datetime')
 p1.line(df.t, predictions, color="navy", alpha=0.8)
 p1.line(df.t, df.total_electricity, color="orange", alpha=0.6)
 p1.varea(df.t, y1 = lower_bound, y2 = higher_bound, color = 'gray', alpha = 0.2)
 show(p1)
 
-# Calculate prediction error
-mse = mean_squared_error(df.total_electricity, predictions)
-rmse = sqrt(mse)
-cvrmse = rmse/df.total_electricity.mean()
+# Temperature varying predictions vs real and normal scale
 
-# PLOTS
+p2 = figure(plot_width=800, plot_height=400)
 
-# output to static HTML file
-output_file("predictions2.html")
+p2.circle(df.outdoor_temp, predictions, size=5, color="navy", alpha=0.5)
+p2.circle(df.outdoor_temp, df.total_electricity, size=5, color="orange", alpha=0.2)
+show(p2)
 
-# Temperature varying predictions vs real log scale and normal scale
-p4 = figure(plot_width=800, plot_height=400)
-
-p4.circle(df.outdoor_temp, partial_pooling_predictions, size=5, color="navy", alpha=0.5)
-p4.circle(df.outdoor_temp, log_electricity, size=5, color="orange", alpha=0.2)
-show(p4)
-
-p5 = figure(plot_width=800, plot_height=400)
-
-p5.circle(df.outdoor_temp, predictions, size=5, color="navy", alpha=0.5)
-p5.circle(df.outdoor_temp, df.total_electricity, size=5, color="orange", alpha=0.2)
-show(p5)
-
-# Uncertainty and coverage test
 
