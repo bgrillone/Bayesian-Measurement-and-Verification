@@ -55,8 +55,8 @@ daypart_fs_cos_3 = df.daypart_fs_cos_3
 daypart_fs_cos_4 = df.daypart_fs_cos_4
 daypart_fs_cos_5 = df.daypart_fs_cos_5
 
-
-# CROSS VALIDATION
+# 1 - CV(RMSE) and coverage through cross-validation
+# First run a cross-validation to calculate cv(rmse) and coverage on unseen data for the three pooling techniques
 
 # Create kfold cross-validation splits
 
@@ -71,10 +71,6 @@ complete_pool_cvrmse_list = []
 partial_pool_coverage_list = []
 nopool_coverage_list = []
 complete_pool_coverage_list = []
-
-partial_pool_pool_waic_list = []
-nopool_waic_list = []
-complete_pool_waic_list = []
 
 for train_index, test_index in kf.split(df):
 
@@ -349,13 +345,202 @@ for train_index, test_index in kf.split(df):
     complete_pool_cvrmse_list.append (complete_pool_cvrmse)
     complete_pool_coverage_list.append(complete_pool_coverage)
 
+# 2 - LOO/WAIC for the three pooling techniques evaluated without cross-validation
+
+# create coords for pymc3
+coords_2 = {"obs_id": np.arange(temperature.size)}
+coords_2["profile_cluster"] = unique_clusters
+coords_2["heat_cluster"] = unique_heat_clusters
+coords_2["cool_cluster"] = unique_cool_clusters
+coords_2["daypart"] = unique_dayparts
+
+# Bayesian linear model with Intercept, Fourier series for the seasonal features,
+# temperatures, pooled on profile and temperature clustering
+
+with pm.Model(coords=coords_2) as partial_pooling_2:
+    profile_cluster_idx = pm.Data("profile_cluster_idx", clusters, dims="obs_id")
+    heat_temp_cluster_idx = pm.Data("heat_temp_cluster_idx", heat_clusters, dims="obs_id")
+    cool_temp_cluster_idx = pm.Data("cool_temp_cluster_idx", cool_clusters, dims="obs_id")
+    daypart = pm.Data("daypart", dayparts, dims = "obs_id")
+
+    fs_sin_1 = pm.Data("fs_sin_1", daypart_fs_sin_1, dims = "obs_id")
+    fs_sin_2 = pm.Data("fs_sin_2", daypart_fs_sin_2, dims = "obs_id")
+    fs_sin_3 = pm.Data("fs_sin_3", daypart_fs_sin_3, dims = "obs_id")
+    fs_sin_4 = pm.Data("fs_sin_4", daypart_fs_sin_4, dims = "obs_id")
+    fs_sin_5 = pm.Data("fs_sin_5", daypart_fs_sin_5, dims = "obs_id")
+    fs_cos_1 = pm.Data("fs_cos_1", daypart_fs_cos_1, dims = "obs_id")
+    fs_cos_2 = pm.Data("fs_cos_2", daypart_fs_cos_2, dims = "obs_id")
+    fs_cos_3 = pm.Data("fs_cos_3", daypart_fs_cos_3, dims = "obs_id")
+    fs_cos_4 = pm.Data("fs_cos_4", daypart_fs_cos_4, dims = "obs_id")
+    fs_cos_5 = pm.Data("fs_cos_5", daypart_fs_cos_5, dims = "obs_id")
+
+    cooling_temp = pm.Data("cooling_temp", outdoor_temp_c, dims="obs_id")
+    heating_temp = pm.Data("heating_temp", outdoor_temp_h, dims="obs_id")
+
+    # Hyperpriors:
+    bf = pm.Normal("bf", mu=0.0, sigma=1.0)
+    sigma_bf = pm.Exponential("sigma_bf", 1.0)
+    a = pm.Normal("a", mu=0.0, sigma=1.0)
+    sigma_a = pm.Exponential("sigma_a", 1.0)
+
+    btc = pm.Normal("btc", mu=0.0, sigma=1.0, dims=("daypart", "cool_cluster"))
+    bth = pm.Normal("bth", mu=0.0, sigma=1.0, dims=("daypart", "heat_cluster"))
+
+    # Varying intercepts
+    a_cluster = pm.Normal("a_cluster", mu=a, sigma=sigma_a, dims=("daypart", "profile_cluster"))
+
+    # Varying slopes:
+    bs1 = pm.Normal("bs1", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bs2 = pm.Normal("bs2", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bs3 = pm.Normal("bs3", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bs4 = pm.Normal("bs4", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bs5 = pm.Normal("bs5", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bc1 = pm.Normal("bc1", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bc2 = pm.Normal("bc2", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bc3 = pm.Normal("bc3", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bc4 = pm.Normal("bc4", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+    bc5 = pm.Normal("bc5", mu=bf, sigma=sigma_bf, dims="profile_cluster")
+
+    # Expected value per county:
+    mu = a_cluster[daypart, profile_cluster_idx] + bs1[profile_cluster_idx] * fs_sin_1 + bs2[profile_cluster_idx] * fs_sin_2 + \
+         bs3[profile_cluster_idx] * fs_sin_3 + bs4[profile_cluster_idx] * fs_sin_4 + \
+         bs5[profile_cluster_idx] * fs_sin_5 + bc1[profile_cluster_idx] * fs_cos_1 + \
+         bc2[profile_cluster_idx] * fs_cos_2 + bc3[profile_cluster_idx] * fs_cos_3 + \
+         bc4[profile_cluster_idx] * fs_cos_4 + bc5[profile_cluster_idx] * fs_cos_5 + \
+         btc[daypart, cool_temp_cluster_idx] * cooling_temp + bth[daypart, heat_temp_cluster_idx] * heating_temp
+
+    # Model error:
+    sigma = pm.Exponential("sigma", 1.0)
+
+    #Likelihood
+    y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity, dims="obs_id")
+
+#Fitting
+with partial_pooling_2:
+    approx = pm.fit(n=50000,
+                    method='fullrank_advi',
+                    callbacks=[CheckParametersConvergence(tolerance=0.01)])
+
+partial_pooled_loo = az.loo(partial_pooling_trace, partial_pooling_2)
+partial_pooled_waic = az.waic(partial_pooling_trace, partial_pooling_2)
+
+with pm.Model(coords=coords_2) as no_pooling_2:
+    profile_cluster_idx = pm.Data("profile_cluster_idx", clusters, dims="obs_id")
+    heat_temp_cluster_idx = pm.Data("heat_temp_cluster_idx", heat_clusters, dims="obs_id")
+    cool_temp_cluster_idx = pm.Data("cool_temp_cluster_idx", cool_clusters, dims="obs_id")
+    daypart = pm.Data("daypart", dayparts, dims="obs_id")
+
+    fs_sin_1 = pm.Data("fs_sin_1", daypart_fs_sin_1, dims="obs_id")
+    fs_sin_2 = pm.Data("fs_sin_2", daypart_fs_sin_2, dims="obs_id")
+    fs_sin_3 = pm.Data("fs_sin_3", daypart_fs_sin_3, dims="obs_id")
+    fs_sin_4 = pm.Data("fs_sin_4", daypart_fs_sin_4, dims="obs_id")
+    fs_sin_5 = pm.Data("fs_sin_5", daypart_fs_sin_5, dims="obs_id")
+    fs_cos_1 = pm.Data("fs_cos_1", daypart_fs_cos_1, dims="obs_id")
+    fs_cos_2 = pm.Data("fs_cos_2", daypart_fs_cos_2, dims="obs_id")
+    fs_cos_3 = pm.Data("fs_cos_3", daypart_fs_cos_3, dims="obs_id")
+    fs_cos_4 = pm.Data("fs_cos_4", daypart_fs_cos_4, dims="obs_id")
+    fs_cos_5 = pm.Data("fs_cos_5", daypart_fs_cos_5, dims="obs_id")
+
+    cooling_temp = pm.Data("cooling_temp", outdoor_temp_c, dims="obs_id")
+    heating_temp = pm.Data("heating_temp", outdoor_temp_h, dims="obs_id")
+
+    # Priors:
+    a_cluster = pm.Normal("a", mu=0.0, sigma=1.0, dims=("daypart", "profile_cluster"))
+    btc = pm.Normal("btc", mu=0.0, sigma=1.0, dims=("daypart", "cool_cluster"))
+    bth = pm.Normal("bth", mu=0.0, sigma=1.0, dims=("daypart", "heat_cluster"))
+
+    bs1 = pm.Normal("bs1", mu=0.0, sigma=1.0, dims="profile_cluster")
+    bs2 = pm.Normal("bs2", mu=0.0, sigma=1.0, dims="profile_cluster")
+    bs3 = pm.Normal("bs3", mu=0.0, sigma=1.0, dims="profile_cluster")
+    bs4 = pm.Normal("bs4", mu=0.0, sigma=1.0, dims="profile_cluster")
+    bs5 = pm.Normal("bs5", mu=0.0, sigma=1.0, dims="profile_cluster")
+    bc1 = pm.Normal("bc1", mu=0.0, sigma=1.0, dims="profile_cluster")
+    bc2 = pm.Normal("bc2", mu=0.0, sigma=1.0, dims="profile_cluster")
+    bc3 = pm.Normal("bc3", mu=0.0, sigma=1.0, dims="profile_cluster")
+    bc4 = pm.Normal("bc4", mu=0.0, sigma=1.0, dims="profile_cluster")
+    bc5 = pm.Normal("bc5", mu=0.0, sigma=1.0, dims="profile_cluster")
+
+    # Expected value per county:
+    mu = a_cluster[daypart, profile_cluster_idx] + bs1[profile_cluster_idx] * fs_sin_1 + bs2[
+        profile_cluster_idx] * fs_sin_2 + \
+         bs3[profile_cluster_idx] * fs_sin_3 + bs4[profile_cluster_idx] * fs_sin_4 + \
+         bs5[profile_cluster_idx] * fs_sin_5 + bc1[profile_cluster_idx] * fs_cos_1 + \
+         bc2[profile_cluster_idx] * fs_cos_2 + bc3[profile_cluster_idx] * fs_cos_3 + \
+         bc4[profile_cluster_idx] * fs_cos_4 + bc5[profile_cluster_idx] * fs_cos_5 + \
+         btc[daypart, cool_temp_cluster_idx] * cooling_temp + bth[daypart, heat_temp_cluster_idx] * heating_temp
+
+    # Model error:
+    sigma = pm.Exponential("sigma", 1.0)
+
+    y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity, dims='obs_id')
+
+# Fitting without sampling
+with no_pooling_2:
+    approx = pm.fit(n=50000,
+                    method='fullrank_advi',
+                    callbacks=[CheckParametersConvergence(tolerance=0.01)])
+    no_pooling_trace = approx.sample(1000)
+
+# Sampling from the posterior setting test data to check the predictions on unseen data
+
+with pm.Model(coords=coords_2) as complete_pooling_2:
+    fs_sin_1 = pm.Data("fs_sin_1", daypart_fs_sin_1, dims="obs_id")
+    fs_sin_2 = pm.Data("fs_sin_2", daypart_fs_sin_2, dims="obs_id")
+    fs_sin_3 = pm.Data("fs_sin_3", daypart_fs_sin_3, dims="obs_id")
+    fs_sin_4 = pm.Data("fs_sin_4", daypart_fs_sin_4, dims="obs_id")
+    fs_sin_5 = pm.Data("fs_sin_5", daypart_fs_sin_5, dims="obs_id")
+    fs_cos_1 = pm.Data("fs_cos_1", daypart_fs_cos_1, dims="obs_id")
+    fs_cos_2 = pm.Data("fs_cos_2", daypart_fs_cos_2, dims="obs_id")
+    fs_cos_3 = pm.Data("fs_cos_3", daypart_fs_cos_3, dims="obs_id")
+    fs_cos_4 = pm.Data("fs_cos_4", daypart_fs_cos_4, dims="obs_id")
+    fs_cos_5 = pm.Data("fs_cos_5", daypart_fs_cos_5, dims="obs_id")
+
+    cooling_temp = pm.Data("cooling_temp", outdoor_temp_c, dims="obs_id")
+    heating_temp = pm.Data("heating_temp", outdoor_temp_h, dims="obs_id")
+
+    # Priors:
+    a = pm.Normal("a", mu=0.0, sigma=1.0)
+    btc = pm.Normal("btc", mu=0.0, sigma=1.0)
+    bth = pm.Normal("bth", mu=0.0, sigma=1.0)
+
+    bs1 = pm.Normal("bs1", mu=0.0, sigma=1.0)
+    bs2 = pm.Normal("bs2", mu=0.0, sigma=1.0)
+    bs3 = pm.Normal("bs3", mu=0.0, sigma=1.0)
+    bs4 = pm.Normal("bs4", mu=0.0, sigma=1.0)
+    bs5 = pm.Normal("bs5", mu=0.0, sigma=1.0)
+    bc1 = pm.Normal("bc1", mu=0.0, sigma=1.0)
+    bc2 = pm.Normal("bc2", mu=0.0, sigma=1.0)
+    bc3 = pm.Normal("bc3", mu=0.0, sigma=1.0)
+    bc4 = pm.Normal("bc4", mu=0.0, sigma=1.0)
+    bc5 = pm.Normal("bc5", mu=0.0, sigma=1.0)
+
+    # Expected value per county:
+    mu = a + bs1 * fs_sin_1 + bs2 * fs_sin_2 + bs3 * fs_sin_3 + bs4 * fs_sin_4 + bs5 * fs_sin_5 + bc1 * fs_cos_1 + \
+         bc2 * fs_cos_2 + bc3 * fs_cos_3 + bc4 * fs_cos_4 + bc5 * fs_cos_5 + btc * cooling_temp + bth * heating_temp
+
+    # Model error:
+    sigma = pm.Exponential("sigma", 1.0)
+
+    y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity, dims='obs_id')
+
+# Fitting without sampling
+with complete_pooling_2:
+    approx = pm.fit(n=50000,
+                    method='fullrank_advi',
+                    callbacks=[CheckParametersConvergence(tolerance=0.01)])
+    complete_pooling_trace = approx.sample(1000)
+
+#Compare the LOO of the 3 complete models
+
+df_comp_loo = az.compare({'partial_pooling': partial_pooling_trace, 'no_pooling': no_pooling_trace, 'complete_pooling': complete_pooling_trace})
 
 #Export Results
 cvrmse_list = [np.mean(partial_pool_cvrmse_list), np.mean(complete_pool_cvrmse_list), np.mean(nopool_cvrmse_list)]
 coverage_list = [np.mean(partial_pool_coverage_list), np.mean(complete_pool_coverage_list), np.mean(nopool_coverage_list)]
 models = ['partial_pooling', 'complete_pooling', 'no_pooling']
 
-export_dict = {'cvrmse' : cvrmse_list, 'coverage' : coverage_list, 'models' : models}
-df = pd.DataFrame(data = export_dict)
+export_dict = {'cvrmse' : cvrmse_list, 'coverage' : coverage_list}
+export_df = pd.DataFrame(data = export_dict, index=models)
 
-df.to_csv("/root/benedetto/results/optimization.csv")
+
+export_df.to_csv("/root/benedetto/results/optimization.csv")
