@@ -12,7 +12,7 @@ library(penalized)
 library(plotly)
 library(lubridate)
 setwd("/Users/beegroup/Github/Bayes-M&V")
-source("clustering_beegeo.R")
+source("preprocessing/clustering_beegeo.R")
 
 id = 'multilevel_hourly'
 df <- fread("data/Id50_hourly.csv",data.table = F)
@@ -42,7 +42,7 @@ clustering <- clustering_load_curves(
   minimum_days_for_a_cluster = 10,
   force_plain_cluster = F,
   filename_prefix=paste(id,sep="~"),
-  folder_plots="clustering_plots"
+  folder_plots="clustering_plots/"
 )
 
 df_centroids <- clustering$centroids
@@ -65,7 +65,7 @@ classification <- classifier_load_curves(
   # plot_file = NULL,
   plot_file = "classification.pdf",
   filename_prefix=paste(id,sep="~"),
-  folder_plots="clustering_plots"
+  folder_plots="clustering_plots/"
 )
 
 df_centroids <- reshape2::melt(df_centroids,id_vars=c("s"))

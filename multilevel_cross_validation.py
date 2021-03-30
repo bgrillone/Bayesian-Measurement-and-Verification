@@ -200,5 +200,6 @@ for train_index, test_index in kf.split(df):
 
     partial_pooling_cv_accuracy.append (cvrmse)
     coverage_list.append(coverage)
-    avg_cvrmse = np.mean(partial_pooling_cv_accuracy)
-    avg_coverage = np.mean(coverage_list)
+
+avg_cvrmse = np.mean(partial_pooling_cv_accuracy)
+avg_coverage = np.mean(coverage_list)
