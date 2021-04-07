@@ -538,9 +538,8 @@ df_comp_loo = az.compare({'partial_pooling': partial_pooling_trace, 'no_pooling'
 cvrmse_list = [np.mean(partial_pool_cvrmse_list), np.mean(complete_pool_cvrmse_list), np.mean(nopool_cvrmse_list)]
 coverage_list = [np.mean(partial_pool_coverage_list), np.mean(complete_pool_coverage_list), np.mean(nopool_coverage_list)]
 models = ['partial_pooling', 'complete_pooling', 'no_pooling']
-
 export_dict = {'cvrmse' : cvrmse_list, 'coverage' : coverage_list}
 export_df = pd.DataFrame(data = export_dict, index=models)
-
+export_df = export_df.join(df_comp_loo)
 
 export_df.to_csv("/root/benedetto/results/optimization.csv")

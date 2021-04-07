@@ -12,7 +12,7 @@ library(penalized)
 library(plotly)
 library(lubridate)
 setwd("/Users/beegroup/Github/Bayes-M&V")
-source("preprocessing/clustering_beegeo.R")
+source("preprocessing/functions_updated.R")
 
 id = 'multilevel_hourly'
 df <- fread("data/Id50_hourly.csv",data.table = F)
@@ -30,9 +30,9 @@ clustering <- clustering_load_curves(
   temperature_column = "outdoor_temp",
   k=2:6,
   perc_cons = T,
-  n_dayparts = 24,
+  n_dayparts = 8,
   norm_specs = NULL,
-  input_vars = c("daily_cons","daily_temp"), # POSSIBLE INPUTS: c("load_curves", "days_weekend", "days_of_the_week", "daily_cons", "daily_temp"),
+  input_vars = c("load_curves"), # POSSIBLE INPUTS: c("load_curves", "days_weekend", "days_of_the_week", "daily_cons", "daily_temp"),
   centroids_plot_file = "clustering.pdf",
   bic_plot_file = "bic.pdf",
   # centroids_plot_file = NULL,
@@ -91,6 +91,9 @@ df$s<-as.factor(df$s)
 df$all <- "all"
 df$GHI <- 0
 df$windSpeed <- 0
+df <- df[order(df$t),]
+df <- df[!is.na(df$s),]
+
 characterization <- characterizer(
   df_ini = df,
   tz_local = "Europe/Madrid",
@@ -100,6 +103,7 @@ characterization <- characterizer(
   GHI_column = "GHI",
   intercept_column = "weekday",
   windSpeed_column = "windSpeed",
+  date_column = "local_date",
   group_column ="all",
   hours_of_each_daypart = 4,
   centroids = df_centroids,
@@ -107,9 +111,12 @@ characterization <- characterizer(
   classification = classification[,c("date","s")]
 )
 
+indicators <- indicators_estimator(characterization, meteo_df = df[,c("t","outdoor_temp","windSpeed","GHI")])
+
 ggplot(characterization$df) +
-  geom_point(aes(outdoor_temp,total_electricity,col=s), size=0.4) +
-  #geom_point(aes(outdoor_temp,pred), color="red", size=0.1) +
+  geom_point(aes(outdoor_temp,total_electricity), size=0.4) +
+  geom_point(aes(outdoor_temp,pred), color="red", size=0.1) +
+  facet_wrap(~s)+
   ylab(bquote("W/m"^2)) + xlab(bquote("Temperature ["*degree*"C]")) +
   theme_bw() +
   theme(
@@ -122,13 +129,13 @@ ggplot(characterization$df) +
     axis.text.x = element_text(angle=60,hjust = 1))
 
 characterization$df$t <- as.POSIXct(characterization$df$t) 
-ggplotly(ggplot(characterization$df) +
+ggplot(characterization$df) +
   geom_line(aes(t,total_electricity)) +
   geom_line(aes(t,pred), color="red",alpha=0.5) +
   ylab("electricity [kWh]") + xlab("temperature [ºC]") +
-  theme_bw())
+  theme_bw()
 
-df_export <- characterization$df %>% select(t, total_electricity, outdoor_temp, s, outdoor_temp_h, outdoor_temp_c, 
-                                            starts_with("daypart_fs"))
+df_export <- characterization$df %>% select(t, total_electricity, outdoor_temp, s, daypart, outdoor_temp_h, outdoor_temp_lp_h,
+                                            outdoor_temp_c, outdoor_temp_lp_c,starts_with("daypart_fs"))
 
 write.csv(df_export, file = "data/Id50_preprocessed.csv")

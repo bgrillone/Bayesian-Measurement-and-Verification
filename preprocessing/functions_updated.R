@@ -770,249 +770,114 @@ mongo_conn <- function(collection, config){
 
 
 characterizer <- function(df_ini, value_column="value", temperature_column = "temperature", windSpeed_column = "windSpeed", 
-                          GHI_column = "GHI", time_column = "time", intercept_column="weekday", tz_local="Europe/Madrid", 
+                          GHI_column = "GHI", time_column = "time", intercept_column="weekday", tz_local="Europe/Madrid", date_column = "date",
                           group_column="season", hours_of_each_daypart=8, centroids = df_centroids, centroids_summary = df_centroids_avg,
                           classification = classification[,c("date","s","tariff")]){
   
-  # df_ini = df_
+  # df_ini = df
   # tz_local = "Europe/Madrid"
-  # time_column = "time"
-  # value_column = "powerContractM2"
-  # temperature_column = "temperature"
+  # time_column = "t"
+  # value_column = "total_electricity"
+  # temperature_column = "outdoor_temp"
   # GHI_column = "GHI"
   # intercept_column = "weekday"
   # windSpeed_column = "windSpeed"
-  # group_column ="tariff"
+  # group_column ="all"
+  # date_column = "local_date"
   # hours_of_each_daypart = 4
   # centroids = df_centroids
   # centroids_summary = df_centroids_avg
-  # classification = classification[,c("date","s","tariff")]
-  
-  df_s <- df_ini
-  
-  if(class(df_s)=="data.frame"){ df_s <- list("all"=df_s)}
+  # classification = classification[,c("date","s")]
+
+  # Add daypart and weekday
+  df_ini$daypart <- as.factor(floor(hour(df_ini[,time_column])/hours_of_each_daypart))
+  df_ini$weekday <- strftime(df_ini[,date_column], "%u")
   
   # Run the trainer of the model for a one-year-window rolling dataset by months
-  #gr <- names(df_s)[1]
-  daily_df <- df_s
-  
-  daily_df_roll_years <- rolling_dataset_by_n_months(df = daily_df, date_column = "local_date", n = 12)
-  
-  results_year <- list()
-  
   features <- do.call(c,list(
-    lapply(1:(24/hours_of_each_daypart),FUN=function(x){list(min=12,max=25,n=15,class="float")}),
-    lapply(1:(24/hours_of_each_daypart),FUN=function(x){list(min=0,max=7,n=15,class="float")}),
-    lapply(1:length(levels(daily_df$s)),FUN=function(x){list(min=0,max=1,n=1,class="float")}),
-    list(list(min=1,max=100,n=31,class="float")),
+    lapply(1:(24/hours_of_each_daypart),FUN=function(x){list(min=15,max=23,n=15,class="float")}),
+    lapply(1:(24/hours_of_each_daypart),FUN=function(x){list(min=0,max=5,n=15,class="float")}),
+    lapply(1:length(levels(df_ini$s)),FUN=function(x){list(min=0,max=1,n=1,class="float")}),
+    list(list(min=1,max=48,n=31,class="float")),
     list(list(min=0,max=1,n=1,class="int"))
   ))
   names(features) <- c(
     mapply(1:(24/hours_of_each_daypart),FUN=function(x){paste0("tbal_",x)}),
     mapply(1:(24/hours_of_each_daypart),FUN=function(x){paste0("hysteresis_",x)}),
-    mapply(1:length(levels(daily_df$s)),FUN=function(x){paste0("seasonalities_wdep_",x)}),
+    mapply(1:length(levels(df_ini$s)),FUN=function(x){paste0("seasonalities_wdep_",x)}),
     "thermal_time_constant",
     "training_without_holidays"
   )
-  # tbal_min <- rep(10,(24/hours_of_each_daypart)) #*length(unique(daily_df$s))
-  # tbal_max <- rep(30,(24/hours_of_each_daypart))
-  # hysteresis_min <- rep(0,(24/hours_of_each_daypart))
-  # hysteresis_max <- rep(7,(24/hours_of_each_daypart))
-  # seasonalities_wdep_min <- rep(0,length(levels(daily_df$s)))
-  # seasonalities_wdep_max <- rep(1,length(levels(daily_df$s)))
   
-  y1 <- T
-  
-  if(identical(daily_df_roll_years,list())){
-    return(NULL)
-  }
-  
-  for (y in names(daily_df_roll_years)){
-    #y <- names(daily_df_roll_years)[1]#14
-    daily_df_year <- daily_df_roll_years[[y]]
-    rows_to_train <- do.call(c,lapply(unique(daily_df_year$s),
+  rows_to_train <- do.call(c,lapply(levels(df_ini$s),
                                       FUN= function(x){
-                                        sample(as.numeric(rownames(daily_df_year[daily_df_year$s==x,])),
-                                               nrow(daily_df_year[daily_df_year$s==x,])*1,replace = F)
+                                        sample(as.numeric(rownames(df_ini[df_ini$s==x,])),
+                                               nrow(df_ini[df_ini$s==x,])*1,replace = F)
                                       }))
     
-    # Recursive Least Squares
-    # GA <- ga(type = "real-valued",
-    #          fitness = characterization_rls_model_trainer,
-    #          lower = c(tbal_min,hysteresis_min), upper = c(tbal_max,hysteresis_max),
-    #          df = daily_df_year,
-    #          temperature_column = temperature_column,
-    #          windSpeed_column = windSpeed_column,
-    #          GHI_column = GHI_column,
-    #          value_column = value_column,
-    #          intercept_column = intercept_column,
-    #          time_column = time_column,
-    #          daypart_column = "daypart",
-    #          for_optimize = T,
-    #          hours_of_each_daypart = hours_of_each_daypart,
-    #          rows_to_train = rows_to_train,
-    #          monitor=gaMonitor2,
-    #          maxiter=if(y1==T){100}else {10},popSize = 64,parallel= F,pmutation = 0.1)
-    
-    # Least squares
-    # suggestions <- if(y1==T){
-    #   t(data.frame(
-    #     c(tbal_min,hysteresis_min,seasonalities_wdep_min),
-    #     c(tbal_max,hysteresis_max, seasonalities_wdep_max)))
-    # }else{
-    #   t(data.frame(
-    #     c(tbal,hysteresis,seasonalities_wdep),
-    #       c(tbal_min,hysteresis_min,seasonalities_wdep_min),
-    #       c(tbal_max,hysteresis_max,seasonalities_wdep_max))
-    #     )
-    # }
-    
-    GA <- ga(#type = "real-valued",
-      type = "binary",
-      fitness = characterization_model_trainer,
-      # lower = c(tbal_min,hysteresis_min,seasonalities_wdep_min), 
-      # upper = c(tbal_max,hysteresis_max,seasonalities_wdep_max),
-      nBits = sum(mapply(function(x) { nchar(toBin(x)) }, mapply(function(i){i[['n']]},features))),##MODEL
-      min_per_feature = mapply(function(i){i[['min']]},features),##DATA TO RUN
-      max_per_feature = mapply(function(i){i[['max']]},features),##DATA TO RUN
-      nclasses_per_feature = mapply(function(i){i[['n']]},features),##DATA TO RUN
-      class_per_feature = mapply(function(i){i[['class']]},features),##DATA TO RUN
-      names_per_feature = names(features),##DATA TO RUN
-      df = daily_df_year,
-      temperature_column = temperature_column,
-      windSpeed_column = windSpeed_column,
-      GHI_column = GHI_column,
-      value_column = value_column,
-      intercept_column = intercept_column,
-      time_column = time_column,
-      daypart_column = "daypart",
-      for_optimize = T,
-      hours_of_each_daypart = hours_of_each_daypart,
-      rows_to_train = NULL,#rows_to_train,
-      monitor = gaMonitor2,
-      suggestions = NULL,
-      selection = gabin_tourSelection,##MODEL
-      mutation = gabin_raMutation,
-      crossover = partial(bee_uCrossover,nclasses_per_feature = mapply(function(i){i[['n']]},features)),
-      optim = F,
-      maxiter=if(y1==T){30}else{12},popSize = 144,parallel= 24,pmutation = 0.05) #monitor = monitor)
-    params <- decodeValueFromBin(GA@solution[1,], 
-                                 min_per_feature = mapply(function(i){i[['min']]},features),##DATA TO RUN
-                                 max_per_feature = mapply(function(i){i[['max']]},features),##DATA TO RUN
-                                 nclasses_per_feature = mapply(function(i){i[['n']]},features),##DATA TO RUN
-                                 class_per_feature = mapply(function(i){i[['class']]},features))##DATA TO RUN)
-    names(params) <- names(features)
-    tbal <- params[grepl("^tbal",names(params))]
-    hysteresis <- params[grepl("^hysteresis",names(params))]
-    seasonalities_wdep <- params[grepl("^seasonalities_wdep",names(params))]
-    thermal_time_constant <- params["thermal_time_constant"]
-    training_without_holidays <- params["training_without_holidays"]
-    
-    for(tbal_item in names(features)[grepl("^tbal",names(features))]){
-      features[[tbal_item]]$min <- tbal[as.numeric(gsub("tbal_","",tbal_item))] - 2
-      features[[tbal_item]]$max <- tbal[as.numeric(gsub("tbal_","",tbal_item))] + 2
-      features[[tbal_item]]$n <- 3
-    }
-    for(hysteresis_item in names(features)[grepl("^hysteresis",names(features))]){
-      features[[hysteresis_item]]$min <- 
-        if((hysteresis[as.numeric(gsub("hysteresis_","",hysteresis_item))]-0.5)>0){
-          hysteresis[as.numeric(gsub("hysteresis_","",hysteresis_item))] - 0.5
-        } else {0}
-      features[[hysteresis_item]]$max <- 
-        if((hysteresis[as.numeric(gsub("hysteresis_","",hysteresis_item))]+0.5)<7){
-          hysteresis[as.numeric(gsub("hysteresis_","",hysteresis_item))] +0.5
-        } else {7}
-      features[[hysteresis_item]]$n <- 3
-    }
-    for(seasonalities_wdep_item in names(features)[grepl("^seasonalities_wdep",names(features))]){
-      features[[seasonalities_wdep_item]]$min <- seasonalities_wdep[as.numeric(gsub("seasonalities_wdep_","",seasonalities_wdep_item))]
-      if (seasonalities_wdep[as.numeric(gsub("seasonalities_wdep_","",seasonalities_wdep_item))] == 1){
-        features[[seasonalities_wdep_item]]$n <- 0
-      }
-    }
-    features[["thermal_time_constant"]]$min <- thermal_time_constant - 6 
-    features[["thermal_time_constant"]]$max <- thermal_time_constant + 6
-    if(features[["thermal_time_constant"]]$min<1){
-      features[["thermal_time_constant"]]$min <- 1
-    }
-    if(features[["thermal_time_constant"]]$max>100){
-      features[["thermal_time_constant"]]$max <- 100 
-    }
-    features[["thermal_time_constant"]]$n <- 7
-    
-    daily_model <- characterization_model_trainer(
-      params = c(tbal,hysteresis,seasonalities_wdep,thermal_time_constant,training_without_holidays),
-      temperature_column = temperature_column,
-      windSpeed_column = windSpeed_column,
-      GHI_column = GHI_column,
-      value_column = value_column,
-      intercept_column = intercept_column,
-      time_column = time_column,
-      for_optimize = F,
-      daypart_column = "daypart",
-      df = daily_df_year,
-      hours_of_each_daypart = hours_of_each_daypart,
-      rows_to_train = NULL)
-    
-    # daily_model <- characterization_rls_model_trainer(
-    #   params = c(tbal,hysteresis), 
-    #   temperature_column = temperature_column,
-    #   windSpeed_column = windSpeed_column,
-    #   GHI_column = GHI_column,
-    #   value_column = value_column,
-    #   intercept_column = intercept_column,
-    #   time_column = time_column,
-    #   for_optimize = F,
-    #   daypart_column = "daypart",
-    #   df = daily_df_year,
-    #   hours_of_each_daypart = hours_of_each_daypart)
-    
-    # coef(daily_model$mod)
-    # plotly::ggplotly(ggplot(daily_model$df)+geom_line(aes(time,powerContractM2))+geom_line(aes(time,pred),col="red",alpha=0.5))
-    # plotly::ggplotly(ggplot(daily_model$df)+geom_line(aes(time,powerContractM2))+geom_line(aes(time,pred_ini),col="red",alpha=0.5)+geom_line(aes(time,holidays_component),col="blue",alpha=0.5)+
-    #                    geom_point(aes(time,holidays_component,col=s),alpha=0.5))
-    # ggplot(daily_model$df) + geom_point(aes(time,powerContractM2,col=holidays))
-    
-    daily_model$df[,group_column] <- daily_model$df$group
-    daily_model$df$rollYear <- y
-    #daily_model$summary[,group_column] <- gr
-    #daily_model$summary$rollYear <- y
-    
-    results_year[[y]] <- list("df"=daily_model$df,
-                              #"summary"=daily_model$summary,
-                              "mod"=daily_model$mod)
-    y1 <- F
-    
-  }
+  GA <- ga(#type = "real-valued",
+    type = "binary",
+    fitness = characterization_model_trainer,
+    # lower = c(tbal_min,hysteresis_min,seasonalities_wdep_min), 
+    # upper = c(tbal_max,hysteresis_max,seasonalities_wdep_max),
+    nBits = sum(mapply(function(x) { nchar(toBin(x)) }, mapply(function(i){i[['n']]},features))),##MODEL
+    min_per_feature = mapply(function(i){i[['min']]},features),##DATA TO RUN
+    max_per_feature = mapply(function(i){i[['max']]},features),##DATA TO RUN
+    nclasses_per_feature = mapply(function(i){i[['n']]},features),##DATA TO RUN
+    class_per_feature = mapply(function(i){i[['class']]},features),##DATA TO RUN
+    names_per_feature = names(features),##DATA TO RUN
+    df = df_ini,
+    temperature_column = temperature_column,
+    windSpeed_column = windSpeed_column,
+    GHI_column = GHI_column,
+    value_column = value_column,
+    intercept_column = intercept_column,
+    time_column = time_column,
+    date_column = date_column,
+    daypart_column = "daypart",
+    for_optimize = T,
+    hours_of_each_daypart = hours_of_each_daypart,
+    rows_to_train = NULL,#rows_to_train,
+    monitor = gaMonitor2,
+    suggestions = NULL,
+    selection = gabin_tourSelection,##MODEL
+    mutation = gabin_raMutation,
+    crossover = partial(bee_uCrossover,nclasses_per_feature = mapply(function(i){i[['n']]},features)),
+    optim = F,
+    maxiter=10, popSize = 28*8,parallel= T,pmutation = 0.05) #monitor = monitor)
+  params <- decodeValueFromBin(GA@solution[1,], 
+                               min_per_feature = mapply(function(i){i[['min']]},features),##DATA TO RUN
+                               max_per_feature = mapply(function(i){i[['max']]},features),##DATA TO RUN
+                               nclasses_per_feature = mapply(function(i){i[['n']]},features),##DATA TO RUN
+                               class_per_feature = mapply(function(i){i[['class']]},features))##DATA TO RUN)
+  names(params) <- names(features)
+  tbal <- params[grepl("^tbal",names(params))]
+  hysteresis <- params[grepl("^hysteresis",names(params))]
+  seasonalities_wdep <- params[grepl("^seasonalities_wdep",names(params))]
+  thermal_time_constant <- params["thermal_time_constant"]
+  training_without_holidays <- params["training_without_holidays"]
   
-  names(results_year) <- names(daily_df_roll_years)
+  daily_model <- characterization_model_trainer(
+    params = c(tbal,hysteresis,seasonalities_wdep,thermal_time_constant,training_without_holidays),
+    temperature_column = temperature_column,
+    windSpeed_column = windSpeed_column,
+    GHI_column = GHI_column,
+    value_column = value_column,
+    intercept_column = intercept_column,
+    time_column = time_column,
+    date_column = date_column,
+    for_optimize = F,
+    daypart_column = "daypart",
+    df = df_ini,
+    hours_of_each_daypart = hours_of_each_daypart,
+    rows_to_train = NULL)
   
-  gc(reset = T,full = T,verbose = F)
+  daily_model$df[,group_column] <- daily_model$df$group
+  daily_model$df$rollYear <- "last_period"
   
-  list(
-    "df"=do.call(rbind,lapply(results_year,function(i){i$df})),
-    #"summary"=do.call(rbind,lapply(results_year,function(i){i$summary})),
-    "mod"=lapply(results_year,function(i){i$mod})
-  )
-    
-  gc(reset = T,full = T,verbose = F)
-  
-  # Filter all tariffs which have NULL results
-  filter_results <- mapply(function(i)is.null(i),results_all)
-  results_all <- results_all[!filter_results]
-  if(identical(list(),results_all)){
-    return(NULL)
-  }
-  
-  names(results_all) <- names(df_s)
-  
-  # Prediction dataframe output
-  results_all <- list(
-    "df" = do.call(rbind, lapply(FUN=function(i){i$df},results_all)),
-    #"summary" = do.call(rbind, lapply(FUN=function(i){i$summary},results_all)),
-    "mod" = lapply(FUN=function(i){i$mod},results_all)
-  )
-  
+  results_all <- list("df"=daily_model$df,
+                      "mod"=daily_model$mod)
+
   results_all$df[,c("iniDate","endDate")] <- do.call(rbind,strsplit(results_all$df$rollYear,split = "_"))
   results_all$df$iniDate <- ifelse(results_all$df$rollYear=="last_period",NA,as.Date(paste0(results_all$df$iniDate,"01"),"%Y%m%d"))
   results_all$df$endDate <- ifelse(results_all$df$rollYear=="last_period",NA,as.Date(paste0(results_all$df$endDate,"01"),"%Y%m%d") + months(1) - days(1))
@@ -1021,6 +886,7 @@ characterizer <- function(df_ini, value_column="value", temperature_column = "te
   results_all$config_aggregator <- list(
     tz_local = tz_local,
     time_column = time_column,
+    date_column = date_column,
     value_column = value_column,
     temperature_column = temperature_column,
     GHI_column = GHI_column,
@@ -1073,15 +939,15 @@ list_of_holidays <- function(national_days, days_list){
 }
 
 tune_with_params <- function(df, params, temperature_column, GHI_column, windSpeed_column, daypart_column, weekday_column, time_column, 
-                             seasonality_column = "s", force_weather_heating_vars_to_0 = F, force_weather_cooling_vars_to_0 = F, 
+                             date_column, seasonality_column = "s", force_weather_heating_vars_to_0 = F, force_weather_cooling_vars_to_0 = F, 
                              hours_of_each_daypart=8, training_seasonality_levels=NULL, force_covid_lockdown=NULL){
   
   # Assign holidays
-  holidays <- list_of_holidays(national_days = national_days, days_list = df$day)
-  df$holidays <- ifelse(df$day %in% holidays,1,0)
+  holidays <- list_of_holidays(national_days = national_days, days_list = df[,date_column])
+  df$holidays <- ifelse(df[,date_column] %in% holidays,1,0)
   # The holidays consumption affectation starts aprox 12 hours before
   df$holidays <- pmax(
-    lead(df$holidays,ceiling(8/hours_of_each_daypart),df$holidays[nrow(df)]),
+    lead(df$holidays, ceiling(8/hours_of_each_daypart), df$holidays[nrow(df)]),
     df$holidays)
   
   # Force seasonality factors
@@ -1107,7 +973,7 @@ tune_with_params <- function(df, params, temperature_column, GHI_column, windSpe
     df = df,temperature_column = temperature_column, windSpeed_column = windSpeed_column
   )
   df <- add_fs_daypart(
-    df = df, daypart_column = daypart_column,hours_of_each_daypart = hours_of_each_daypart
+    df = df, time_column = time_column
   )
   df <- add_fs_weekpart(
     df = df, daypart_column = daypart_column, weekday_column= weekday_column, hours_of_each_daypart = hours_of_each_daypart
@@ -1133,28 +999,6 @@ tune_with_params <- function(df, params, temperature_column, GHI_column, windSpe
   
   # Generate all the seasonal dummies
   df <- cbind(df,as.data.frame(model.matrix(~ 0 + s, df)))
-  
-  # Covid lockdown period
-  if(!is.null(force_covid_lockdown)){
-    df$covid_lockdown <- factor(rep(force_covid_lockdown,nrow(df)), levels=c(T,F))
-  } else {
-    df$covid_lockdown <- as.factor(df$time >= as.POSIXct("2020-03-15 00:00:00", tz="Europe/Madrid") &
-                                     df$time <= as.POSIXct("2020-06-21 00:00:00", tz="Europe/Madrid"))
-  }
-  
-  # Tune covid seasonal dummies
-  seasonalities_covid <- df[colnames(df)[grepl("^s[0-9]{2}$",colnames(df))]] * ifelse(as.logical(as.character(df$covid_lockdown)),1,0)
-  colnames(seasonalities_covid) <- paste0(colnames(seasonalities_covid), "_covid_lockdown")
-  df <- cbind(
-    df,
-    seasonalities_covid)  
-  
-  # Tune covid daypart fourier series 
-  dp_covid <- df[colnames(df)[grepl("^daypart_fs",colnames(df))]] * ifelse(as.logical(as.character(df$covid_lockdown)),1,0)
-  colnames(dp_covid) <- paste0("covid_lockdown_",colnames(dp_covid))
-  df <- cbind(
-    df,
-    dp_covid)
   
   return(df)
 }
@@ -1215,7 +1059,7 @@ characterization_rls_model_trainer <- function(params, df, temperature_column = 
 
 
 characterization_model_trainer <- function(X=NULL, params = NULL, nBits,min_per_feature,max_per_feature,nclasses_per_feature,class_per_feature,names_per_feature, df, temperature_column = "temperature", value_column = "value", windSpeed_column = "windSpeed", 
-                                           daypart_column = "daypart", time_column= "time", GHI_column = "GHI", intercept_column = "weekday", for_optimize=F, 
+                                           daypart_column = "daypart", time_column= "time", GHI_column = "GHI", intercept_column = "weekday", date_column = "date", for_optimize=F, 
                                            hours_of_each_daypart=8,rows_to_train=NULL){
   
   # nBits = sum(mapply(function(x) { nchar(toBin(x)) }, mapply(function(i){i[['n']]},features)))
@@ -1225,7 +1069,7 @@ characterization_model_trainer <- function(X=NULL, params = NULL, nBits,min_per_
   # class_per_feature = mapply(function(i){i[['class']]},features)
   # names_per_feature = names(features)
   # X=sample(0:1, nBits,replace=T)
-  
+
   if(is.null(params)){
     params <- decodeValueFromBin(X, class_per_feature, nclasses_per_feature, min_per_feature = min_per_feature, 
                                  max_per_feature = max_per_feature)
@@ -1235,7 +1079,7 @@ characterization_model_trainer <- function(X=NULL, params = NULL, nBits,min_per_
   
   tryCatch({
     
-    #df <- daily_df_year
+    #df <- df_ini
     #params <- c(c(16,16,16,16,16,16), c(2,2,2,2,2,2), c(1,1,1,1,1,1))
     if(!is.null(rows_to_train)){
       df$val <- !(rownames(df) %in% as.character(rows_to_train))
@@ -1244,28 +1088,18 @@ characterization_model_trainer <- function(X=NULL, params = NULL, nBits,min_per_
     }
     df <- tune_with_params(df = df, params = params, temperature_column = temperature_column, GHI_column = GHI_column, 
                            windSpeed_column = windSpeed_column, daypart_column = daypart_column, weekday_column = intercept_column, 
-                           time_column = time_column, seasonality_column = "s", hours_of_each_daypart = hours_of_each_daypart,
+                           time_column = time_column, date_column = date_column, seasonality_column = "s", hours_of_each_daypart = hours_of_each_daypart,
                            training_seasonality_levels = NULL)
-    if(length(unique(df$covid_lockdown))==1){
+    
       form <- as.formula(sprintf("%s ~ 0 + %s"
                                  ,value_column
                                  ,paste(
                                    "s"
-                                   #"daypart:s"
                                    , paste0(colnames(df)[grepl("^daypart_fs_",colnames(df))],":s",collapse=" + ")
-                                   # , paste0(colnames(df)[grepl("^weekpart_fs_",colnames(df))],":s",collapse=" + ")
-                                   , "temperature_lp_c:daypart"
-                                   , "temperature_c:daypart"
-                                   , "temperature_lp_h:daypart"
-                                   , "temperature_h:daypart"
-                                   , "windSpeed_c:daypart"
-                                   , "windSpeed_h:daypart"
-                                   # , "as.factor(holidays)"
-                                   # , paste0(
-                                   #   apply(expand.grid(colnames(df)[grepl("^daypart_holidays_fs_",colnames(df))], colnames(df)[grepl("^yearpart_holidays_fs_",colnames(df))],stringsAsFactors = F),1,paste,collapse=":")
-                                   #   ,collapse=" + ")
-                                   #, paste0(colnames(df)[grepl("^daypart_holidays_fs_",colnames(df))],"",collapse=" + ")
-                                   #, paste0(colnames(df)[grepl("^yearpart_holidays_fs_",colnames(df))],"",collapse=" + ")
+                                   , paste0(temperature_column ,"_lp_c:daypart")
+                                   , paste0(temperature_column ,"_c:daypart")
+                                   , paste0(temperature_column ,"_lp_h:daypart")
+                                   , paste0(temperature_column ,"_h:daypart")
                                    ,sep=" + ")
       ))
       if(params["training_without_holidays"]==0){
@@ -1279,44 +1113,6 @@ characterization_model_trainer <- function(X=NULL, params = NULL, nBits,min_per_
                                )
         )
       }
-    } else {
-      form <- as.formula(sprintf("%s ~ 0 + %s"
-                                 ,value_column
-                                 ,paste(
-                                   #"daypart:s:covid_lockdown"
-                                   paste0(colnames(df)[grepl("^s[0-9]{2}$",colnames(df))],collapse=" + ")
-                                   ,paste0(colnames(df)[grepl("^s[0-9]{2}_covid_lockdown$",colnames(df))],collapse=" + ")
-                                   # ,"s"
-                                   , paste0(colnames(df)[grepl("^covid_lockdown_daypart_fs_",colnames(df))],":s",collapse=" + ")
-                                   , paste0(colnames(df)[grepl("^daypart_fs_",colnames(df))],":s",collapse=" + ")
-                                   # , paste0(colnames(df)[grepl("^weekpart_fs_",colnames(df))],":s:covid_lockdown",collapse=" + ")
-                                   , "temperature_lp_c:daypart:covid_lockdown"
-                                   , "temperature_c:daypart:covid_lockdown"
-                                   , "temperature_lp_h:daypart:covid_lockdown"
-                                   , "temperature_h:daypart:covid_lockdown"
-                                   , "windSpeed_c:daypart:covid_lockdown"
-                                   , "windSpeed_h:daypart:covid_lockdown"
-                                   # , "as.factor(holidays):covid_lockdown"
-                                   # , paste0(
-                                   #   apply(expand.grid(colnames(df)[grepl("^daypart_holidays_fs_",colnames(df))], colnames(df)[grepl("^yearpart_holidays_fs_",colnames(df))],stringsAsFactors = F),1,paste,collapse=":")
-                                   #   ,":covid_lockdown",collapse=" + ")
-                                   # , paste0(colnames(df)[grepl("^daypart_holidays_fs_",colnames(df))],":covid_lockdown",collapse=" + ")
-                                   # , paste0(colnames(df)[grepl("^yearpart_fs_",colnames(df))],":covid_lockdown",collapse=" + ")
-                                   
-                                   ,sep=" + ")
-      ))
-      if(params["training_without_holidays"]==0){
-        form <- update.formula(form,
-                               as.formula(
-                                 sprintf(".~. + %s",
-                                         paste0(
-                                           paste0(colnames(df)[grepl("^weekpart_fs_",colnames(df))],":s",collapse=" + ")
-                                           ,collapse=" + ")
-                                 )
-                               )
-        )
-      }
-    }
     
     # LS version
     # mod2 <- lm(formula = form, data = df)
@@ -1331,8 +1127,8 @@ characterization_model_trainer <- function(X=NULL, params = NULL, nBits,min_per_
     
     mod_pen <- tryCatch({
       penalized(
-        y,x,~0,positive = grepl("temperature|GHI|windSpeed",colnames(x)), #^s[0-9]{2}$
-        lambda1 = 0,lambda2 = 0, maxiter = 25,
+        y,x,~0,positive = grepl(paste0(temperature_column, GHI_column, windSpeed_column, sep = "|"), colnames(x)), #^s[0-9]{2}$
+        lambda1 = 0,lambda2 = 0, maxiter = 50,
         #startbeta = ifelse(grepl("temperature|GHI|windSpeed",colnames(x)),0,1),
         trace=F
       )
@@ -1354,8 +1150,10 @@ characterization_model_trainer <- function(X=NULL, params = NULL, nBits,min_per_
     df$pred_ini <- df$pred
     
     # Quantify the holidays component
-    rmse_error_no_holidays <- rmserr(df[df$holidays==0,value_column],df$pred[df$holidays==0])$rmse
-    rmse_error_holidays <- rmserr(df[df$holidays==1,value_column],df$pred[df$holidays==1])$rmse
+    rmse_error_no_holidays <- rmserr(df[df$holidays==0 & (is.finite(df[,value_column]) & is.finite(df$pred)),value_column],
+                                     df$pred[df$holidays==0 & (is.finite(df[,value_column]) & is.finite(df$pred))])$rmse
+    rmse_error_holidays <- rmserr(df[df$holidays==1 & (is.finite(df[,value_column]) & is.finite(df$pred)),value_column],
+                                  df$pred[df$holidays==1 & (is.finite(df[,value_column]) & is.finite(df$pred))])$rmse
     if((rmse_error_holidays >= (rmse_error_no_holidays * 1.2)) && params["training_without_holidays"]==1){
       difference_during_holidays <- ifelse(df$holidays==1,df[,value_column] - df$pred,0)
       df$holidays_component <- ifelse(abs(difference_during_holidays)/df$pred >= 0.05,difference_during_holidays,0)
@@ -1369,10 +1167,13 @@ characterization_model_trainer <- function(X=NULL, params = NULL, nBits,min_per_
       df$holidays_component <- 0
     }
     
-    #df$pred2 <- predict(mod2,df)
-    #plotly::ggplotly(ggplot(df)+geom_line(aes(time,powerContractM2))+geom_line(aes(time,pred),col="red",alpha=0.5)
-    #)#+geom_line(aes(time,pred2),col="green",alpha=0.5))
     
+      # ggplot(df) +
+      #   geom_line(aes_string(time_column,value_column))+
+      #   geom_line(aes_string(time_column,"pred"),col="red",alpha=0.5)+
+      #   geom_line(aes_string(time_column,"pred_ini"),col="green",alpha=0.5)
+    
+
   }, error=function(e){return(-20000)})
   
   if(for_optimize==T){
@@ -1549,10 +1350,10 @@ add_cooling_heating_daily_windSpeed_features <- function(df, temperature_column=
   return(df)
 }
 
-add_fs_daypart <- function(df, daypart_column, hours_of_each_daypart){
-  df$hour_daypart <- ((as.numeric(as.character(df[,daypart_column]))*hours_of_each_daypart)+hours_of_each_daypart/2)
+add_fs_daypart <- function(df, time_column){
+  # df$hour_daypart <- ((as.numeric(as.character(df[,daypart_column]))*hours_of_each_daypart)+hours_of_each_daypart/2)
   df_fs <- do.call(cbind,
-                   fs(df$hour_daypart/24,#ifelse(df$hour_daypart>=12,(df$hour_daypart/24)-0.5,(df$hour_daypart/24)+0.5),#
+                   fs(hour(df[,time_column])/24,#ifelse(df$hour_daypart>=12,(df$hour_daypart/24)-0.5,(df$hour_daypart/24)+0.5),#
                       nharmonics = 3, odd = F, prefix="daypart_fs_"))
   df <- cbind(df,df_fs) 
 }
@@ -1617,484 +1418,157 @@ indicators_estimator <- function(characterization, meteo_df, area=1){
   intercept_column = characterization$config_aggregator$intercept_column
   windSpeed_column = characterization$config_aggregator$windSpeed_column
   group_column = characterization$config_aggregator$group_column
+  date_column = characterization$config_aggregator$date_column
   hours_of_each_daypart = characterization$config_aggregator$hours_of_each_daypart
   
-  tryCatch({
-    df_s <- aggregator(meteo_df, value_column, temperature_column, windSpeed_column, GHI_column, time_column, intercept_column, tz_local, 
-                       group_column, hours_of_each_daypart)
-  }, error= function(e){
-    return(NULL)
-  })
+  # Add daypart, weekday, date and seasonality of the characterization
+  meteo_df$daypart <- as.factor(floor(hour(meteo_df[,time_column])/hours_of_each_daypart))
+  meteo_df$weekday <- strftime(as.Date(meteo_df[,time_column]), "%u")
+  meteo_df[,date_column] <- as.Date(meteo_df[,time_column])
+  meteo_df <- merge(meteo_df,
+        characterization$classification,
+        by.x=date_column,by.y="date",all.x=F)
+
+  # Total consumptions
   
-  if(class(df_s)=="data.frame"){
-    grs <- names(characterization$mod)[mapply(function(i)!identical(characterization$mod[[i]],list()),names(characterization$mod))]
-  } else {
-    grs <- names(df_s)
-  }
-  
-  # Run the trainer of the model for a one-year-window rolling dataset by months
-  results_all <- mclapply(grs, function(gr){
-    #gr <- grs[1]
+      mod <- characterization$mod
+      df_total <- tune_with_params(
+        params = c(mod@nuisance$tbal,mod@nuisance$hysteresis,mod@nuisance$seasonalities_wdep,mod@nuisance$thermal_time_constant,mod@nuisance$training_without_holidays),
+        df = meteo_df,
+        temperature_column = temperature_column,
+        GHI_column = GHI_column,
+        windSpeed_column = windSpeed_column,
+        daypart_column = "daypart",
+        weekday_column = intercept_column,
+        time_column = time_column,
+        date_column = date_column,
+        hours_of_each_daypart = hours_of_each_daypart,
+        training_seasonality_levels = mod@nuisance$seasonality_levels
+      )
+      df_total_without_covid <- tune_with_params(
+        params = c(mod@nuisance$tbal,mod@nuisance$hysteresis,mod@nuisance$seasonalities_wdep,mod@nuisance$thermal_time_constant,mod@nuisance$training_without_holidays),
+        df = meteo_df,
+        temperature_column = temperature_column,
+        GHI_column = GHI_column,
+        windSpeed_column = windSpeed_column,
+        daypart_column = "daypart",
+        weekday_column = intercept_column,
+        time_column = time_column,
+        date_column = date_column,
+        hours_of_each_daypart = hours_of_each_daypart,
+        training_seasonality_levels = mod@nuisance$seasonality_levels,
+        force_covid_lockdown=F
+      )
+      df_no_weather_dep <- tune_with_params(
+        params = c(mod@nuisance$tbal,mod@nuisance$hysteresis,mod@nuisance$seasonalities_wdep,mod@nuisance$thermal_time_constant,mod@nuisance$training_without_holidays),
+        df = meteo_df,
+        temperature_column = temperature_column,
+        GHI_column = GHI_column,
+        windSpeed_column = windSpeed_column,
+        force_weather_heating_vars_to_0 = T,
+        force_weather_cooling_vars_to_0 = T,
+        daypart_column = "daypart",
+        weekday_column = intercept_column,
+        time_column = time_column,
+        date_column = date_column,
+        hours_of_each_daypart = hours_of_each_daypart,
+        training_seasonality_levels = mod@nuisance$seasonality_levels
+      )
+      df_weather_dep_heating <- tune_with_params(
+        params = c(mod@nuisance$tbal,mod@nuisance$hysteresis,mod@nuisance$seasonalities_wdep,mod@nuisance$thermal_time_constant,mod@nuisance$training_without_holidays),
+        df = meteo_df,
+        temperature_column = temperature_column,
+        GHI_column = GHI_column,
+        windSpeed_column = windSpeed_column,
+        force_weather_heating_vars_to_0 = F,
+        force_weather_cooling_vars_to_0 = T,
+        daypart_column = "daypart",
+        weekday_column = intercept_column,
+        time_column = time_column,
+        date_column = date_column,
+        hours_of_each_daypart = hours_of_each_daypart,
+        training_seasonality_levels = mod@nuisance$seasonality_levels
+      )
+      df_weather_dep_cooling <- tune_with_params(
+        params = c(mod@nuisance$tbal,mod@nuisance$hysteresis,mod@nuisance$seasonalities_wdep,mod@nuisance$thermal_time_constant,mod@nuisance$training_without_holidays),
+        df = meteo_df,
+        temperature_column = temperature_column,
+        GHI_column = GHI_column,
+        windSpeed_column = windSpeed_column,
+        force_weather_heating_vars_to_0 = T,
+        force_weather_cooling_vars_to_0 = F,
+        daypart_column = "daypart",
+        weekday_column = intercept_column,
+        time_column = time_column,
+        date_column = date_column,
+        hours_of_each_daypart = hours_of_each_daypart,
+        training_seasonality_levels = mod@nuisance$seasonality_levels
+      )
+      total <- #(predict(mod,(as.matrix(model.matrix(mod@nuisance$formula[-2],df_total))))[,1])
+        c((as.matrix(model.matrix(mod@nuisance$formula[-2],df_total))[,names(penalized::coefficients(mod))]) %*% penalized::coefficients(mod))
+      total_without_covid <- c((as.matrix(model.matrix(mod@nuisance$formula[-2],df_total_without_covid))[,names(penalized::coefficients(mod))]) %*% penalized::coefficients(mod))
+      no_weather_dep <- #(predict(mod,as.matrix(model.matrix(mod@nuisance$formula[-2],df_no_weather_dep)))[,1])
+        c((as.matrix(model.matrix(mod@nuisance$formula[-2],df_no_weather_dep))[,names(penalized::coefficients(mod))]) %*% penalized::coefficients(mod))
+      weather_dep_heating <- #(predict(mod,as.matrix(model.matrix(mod@nuisance$formula[-2],df_weather_dep_heating)))[,1])
+        c((as.matrix(model.matrix(mod@nuisance$formula[-2],df_weather_dep_heating))[,names(penalized::coefficients(mod))]) %*% penalized::coefficients(mod)) - no_weather_dep
+      
+      temp_lp <- grepl(paste0(temperature_column,"_lp"),names(penalized::coefficients(mod)))
+      temp <- grepl(paste0(temperature_column,"_h|",temperature_column,"_c"),names(penalized::coefficients(mod)))
+      wind <- grepl(paste0(windSpeed_column,"_c|",windSpeed_column,"_h"),names(penalized::coefficients(mod)))
+      
+      temp_lp_heating <- c(as.matrix(model.matrix(mod@nuisance$formula[-2],df_weather_dep_heating))[,names(penalized::coefficients(mod))[temp_lp]] %*% penalized::coefficients(mod)[temp_lp])
+      temp_heating <- c(as.matrix(model.matrix(mod@nuisance$formula[-2],df_weather_dep_heating))[,names(penalized::coefficients(mod))[temp]] %*% penalized::coefficients(mod)[temp])
+      wind_heating <- c(as.matrix(model.matrix(mod@nuisance$formula[-2],df_weather_dep_heating))[,names(penalized::coefficients(mod))[wind]] %*% penalized::coefficients(mod)[wind])
+      
+      #weather_dep_heating <- ifelse(weather_dep_heating>0,weather_dep_heating,0)
+      weather_dep_cooling <- 
+        c((as.matrix(model.matrix(mod@nuisance$formula[-2],df_weather_dep_cooling))[,names(penalized::coefficients(mod))]) %*% penalized::coefficients(mod)) - no_weather_dep
+      
+      temp_lp_cooling <- c(as.matrix(model.matrix(mod@nuisance$formula[-2],df_weather_dep_cooling))[,names(penalized::coefficients(mod))[temp_lp]] %*% penalized::coefficients(mod)[temp_lp])
+      temp_cooling <- c(as.matrix(model.matrix(mod@nuisance$formula[-2],df_weather_dep_cooling))[,names(penalized::coefficients(mod))[temp]] %*% penalized::coefficients(mod)[temp])
+      wind_cooling <- c(as.matrix(model.matrix(mod@nuisance$formula[-2],df_weather_dep_cooling))[,names(penalized::coefficients(mod))[wind]] %*% penalized::coefficients(mod)[wind])
+      
+      holidays_component <- merge(df_total,mod@nuisance$model[,c(time_column,"holidays_component")],by = time_column,all.x = T)$holidays_component
+      total <- total + ifelse(is.finite(holidays_component),holidays_component,0)
+      total_without_covid <- total_without_covid + ifelse(is.finite(holidays_component),holidays_component,0)
+      covid_affectance <- total - total_without_covid
+      #weather_dep_cooling <- ifelse(weather_dep_cooling>0,weather_dep_cooling,0)
+      #no_weather_dep <- total - weather_dep_cooling - weather_dep_heating
+      df_result <- data.frame(
+        "time"=df_total[,time_column],
+        "year"=year(df_total[,time_column]),
+        "dayHour"=as.numeric(as.character(df_total[,"daypart"]))*hours_of_each_daypart ,
+        "total"=total, 
+        "baseload"=no_weather_dep,
+        "holidays"=holidays_component,
+        "heating"=weather_dep_heating, 
+        "heatingEnvelope"=temp_lp_heating,
+        "heatingVentilation"=temp_heating,
+        "heatingAirInfiltration"=wind_heating,
+        "cooling"=weather_dep_cooling,
+        "coolingEnvelope"=temp_lp_cooling,
+        "coolingVentilation"=temp_cooling,
+        "coolingAirInfiltration"=wind_cooling,
+        "totalDuringCovidLockdown"=ifelse(
+          as.Date(df_total[,time_column]) >= as.Date("2020-03-15") &  
+            as.Date(df_total[,time_column]) <= as.Date("2020-06-21"),
+          total_without_covid,
+          0),
+        "covid"=covid_affectance,
+        "month"=month(df_total[,time_column])
+      )
+      consumptions <- df_result[order(df_result$time),]
     
-    if(class(df_s)=="data.frame"){
-      daily_df <- df_s
-      daily_df <- merge(daily_df,
-                        characterization$classification[characterization$classification$tariff==gr,] %>% dplyr::select(-tariff),
-                        by.x="day",by.y="date",all.x=F)
-    } else {
-      daily_df <- df_s[[gr]]
-    }
-    
-    mod_roll_years <- names(characterization$mod[[gr]])
-    
-    if(nrow(daily_df)==0){return(NULL)}
-    daily_df_roll_years <- rolling_dataset_by_n_months(df = daily_df, date_column = "day", n = 12)[mod_roll_years]
-    daily_df_roll_years <- daily_df_roll_years[mapply(function(i){!is.null(daily_df_roll_years[[i]])},1:length(daily_df_roll_years))]
-    
-    # Total consumptions
-    consumptions <- do.call(rbind,lapply(
-      names(daily_df_roll_years),
-      function(y){
-        tryCatch({
-          # y=names(daily_df_roll_years)[6]
-          roll_year <- unlist(strsplit(y,split = "_"))
-          mod <- characterization$mod[[gr]][[y]]
-          df_total <- tune_with_params(
-            params = c(mod@nuisance$tbal,mod@nuisance$hysteresis,mod@nuisance$seasonalities_wdep,mod@nuisance$thermal_time_constant,mod@nuisance$training_without_holidays),
-            df = daily_df_roll_years[[y]],
-            temperature_column = temperature_column,
-            GHI_column = GHI_column,
-            windSpeed_column = windSpeed_column,
-            daypart_column = "daypart",
-            weekday_column = intercept_column,
-            time_column = time_column,
-            hours_of_each_daypart = hours_of_each_daypart,
-            training_seasonality_levels = mod@nuisance$seasonality_levels
-          )
-          df_total_without_covid <- tune_with_params(
-            params = c(mod@nuisance$tbal,mod@nuisance$hysteresis,mod@nuisance$seasonalities_wdep,mod@nuisance$thermal_time_constant,mod@nuisance$training_without_holidays),
-            df = daily_df_roll_years[[y]],
-            temperature_column = temperature_column,
-            GHI_column = GHI_column,
-            windSpeed_column = windSpeed_column,
-            daypart_column = "daypart",
-            weekday_column = intercept_column,
-            time_column = time_column,
-            hours_of_each_daypart = hours_of_each_daypart,
-            training_seasonality_levels = mod@nuisance$seasonality_levels,
-            force_covid_lockdown=F
-          )
-          df_no_weather_dep <- tune_with_params(
-            params = c(mod@nuisance$tbal,mod@nuisance$hysteresis,mod@nuisance$seasonalities_wdep,mod@nuisance$thermal_time_constant,mod@nuisance$training_without_holidays),
-            df = daily_df_roll_years[[y]],
-            temperature_column = temperature_column,
-            GHI_column = GHI_column,
-            windSpeed_column = windSpeed_column,
-            force_weather_heating_vars_to_0 = T,
-            force_weather_cooling_vars_to_0 = T,
-            daypart_column = "daypart",
-            weekday_column = intercept_column,
-            time_column = time_column,
-            hours_of_each_daypart = hours_of_each_daypart,
-            training_seasonality_levels = mod@nuisance$seasonality_levels
-          )
-          df_weather_dep_heating <- tune_with_params(
-            params = c(mod@nuisance$tbal,mod@nuisance$hysteresis,mod@nuisance$seasonalities_wdep,mod@nuisance$thermal_time_constant,mod@nuisance$training_without_holidays),
-            df = daily_df_roll_years[[y]],
-            temperature_column = temperature_column,
-            GHI_column = GHI_column,
-            windSpeed_column = windSpeed_column,
-            force_weather_heating_vars_to_0 = F,
-            force_weather_cooling_vars_to_0 = T,
-            daypart_column = "daypart",
-            weekday_column = intercept_column,
-            time_column = time_column,
-            hours_of_each_daypart = hours_of_each_daypart,
-            training_seasonality_levels = mod@nuisance$seasonality_levels
-          )
-          df_weather_dep_cooling <- tune_with_params(
-            params = c(mod@nuisance$tbal,mod@nuisance$hysteresis,mod@nuisance$seasonalities_wdep,mod@nuisance$thermal_time_constant,mod@nuisance$training_without_holidays),
-            df = daily_df_roll_years[[y]],
-            temperature_column = temperature_column,
-            GHI_column = GHI_column,
-            windSpeed_column = windSpeed_column,
-            force_weather_heating_vars_to_0 = T,
-            force_weather_cooling_vars_to_0 = F,
-            daypart_column = "daypart",
-            weekday_column = intercept_column,
-            time_column = time_column,
-            hours_of_each_daypart = hours_of_each_daypart,
-            training_seasonality_levels = mod@nuisance$seasonality_levels
-          )
-          total <- #(predict(mod,(as.matrix(model.matrix(mod@nuisance$formula[-2],df_total))))[,1])
-            c((as.matrix(model.matrix(mod@nuisance$formula[-2],df_total))[,names(penalized::coefficients(mod))]) %*% penalized::coefficients(mod))
-          total_without_covid <- c((as.matrix(model.matrix(mod@nuisance$formula[-2],df_total_without_covid))[,names(penalized::coefficients(mod))]) %*% penalized::coefficients(mod))
-          no_weather_dep <- #(predict(mod,as.matrix(model.matrix(mod@nuisance$formula[-2],df_no_weather_dep)))[,1])
-            c((as.matrix(model.matrix(mod@nuisance$formula[-2],df_no_weather_dep))[,names(penalized::coefficients(mod))]) %*% penalized::coefficients(mod))
-          weather_dep_heating <- #(predict(mod,as.matrix(model.matrix(mod@nuisance$formula[-2],df_weather_dep_heating)))[,1])
-            c((as.matrix(model.matrix(mod@nuisance$formula[-2],df_weather_dep_heating))[,names(penalized::coefficients(mod))]) %*% penalized::coefficients(mod)) - no_weather_dep
-          
-          temp_lp <- grepl("temperature_lp",names(penalized::coefficients(mod)))
-          temp <- grepl("temperature_h|temperature_c",names(penalized::coefficients(mod)))
-          wind <- grepl("windSpeed_c|windSpeed_h",names(penalized::coefficients(mod)))
-          
-          temp_lp_heating <- c(as.matrix(model.matrix(mod@nuisance$formula[-2],df_weather_dep_heating))[,names(penalized::coefficients(mod))[temp_lp]] %*% penalized::coefficients(mod)[temp_lp])
-          temp_heating <- c(as.matrix(model.matrix(mod@nuisance$formula[-2],df_weather_dep_heating))[,names(penalized::coefficients(mod))[temp]] %*% penalized::coefficients(mod)[temp])
-          wind_heating <- c(as.matrix(model.matrix(mod@nuisance$formula[-2],df_weather_dep_heating))[,names(penalized::coefficients(mod))[wind]] %*% penalized::coefficients(mod)[wind])
-          
-          #weather_dep_heating <- ifelse(weather_dep_heating>0,weather_dep_heating,0)
-          weather_dep_cooling <- 
-            c((as.matrix(model.matrix(mod@nuisance$formula[-2],df_weather_dep_cooling))[,names(penalized::coefficients(mod))]) %*% penalized::coefficients(mod)) - no_weather_dep
-          
-          temp_lp_cooling <- c(as.matrix(model.matrix(mod@nuisance$formula[-2],df_weather_dep_cooling))[,names(penalized::coefficients(mod))[temp_lp]] %*% penalized::coefficients(mod)[temp_lp])
-          temp_cooling <- c(as.matrix(model.matrix(mod@nuisance$formula[-2],df_weather_dep_cooling))[,names(penalized::coefficients(mod))[temp]] %*% penalized::coefficients(mod)[temp])
-          wind_cooling <- c(as.matrix(model.matrix(mod@nuisance$formula[-2],df_weather_dep_cooling))[,names(penalized::coefficients(mod))[wind]] %*% penalized::coefficients(mod)[wind])
-          
-          holidays_component <- merge(df_total,mod@nuisance$model[,c("time","holidays_component")],by = "time",all.x = T)$holidays_component
-          total <- total + ifelse(is.finite(holidays_component),holidays_component,0)
-          total_without_covid <- total_without_covid + ifelse(is.finite(holidays_component),holidays_component,0)
-          covid_affectance <- total - total_without_covid
-          #weather_dep_cooling <- ifelse(weather_dep_cooling>0,weather_dep_cooling,0)
-          #no_weather_dep <- total - weather_dep_cooling - weather_dep_heating
-          df_result <- data.frame(
-            "monthDay"=strftime(df_total[,time_column],"%m-%d"),
-            "dayHour"=as.numeric(as.character(df_total[,"daypart"]))*hours_of_each_daypart ,
-            "total"=total, 
-            "baseload"=no_weather_dep,
-            "holidays"=holidays_component,
-            "heating"=weather_dep_heating, 
-            "heatingEnvelope"=temp_lp_heating,
-            "heatingVentilation"=temp_heating,
-            "heatingAirInfiltration"=wind_heating,
-            "cooling"=weather_dep_cooling,
-            "coolingEnvelope"=temp_lp_cooling,
-            "coolingVentilation"=temp_cooling,
-            "coolingAirInfiltration"=wind_cooling,
-            "totalDuringCovidLockdown"=ifelse(
-              as.Date(df_total[,time_column]) >= as.Date("2020-03-15") &  
-                as.Date(df_total[,time_column]) <= as.Date("2020-06-21"),
-              total_without_covid,
-              0),
-            "covid"=covid_affectance,
-            "month"=month(df_total[,time_column]),
-            "rollYear"=y,
-            "iniDate"=if(y=="last_period"){NA}else{as.Date(paste0(roll_year[1],"01"),"%Y%m%d")},
-            "endDate"=if(y=="last_period"){NA}else{as.Date(paste0(roll_year[2],"01"),"%Y%m%d")+months(1)-days(1)}
-          )
-          df_result[order(df_result$monthDay),]
-        },error=function(e)NULL)
-      }
-    ))
-    
-    # Indicators
-    weather_indicators <- do.call(rbind,lapply(
-      X=names(daily_df_roll_years),
-      function(y){
-        roll_year <- unlist(strsplit(y,split = "_"))
-        mod <- characterization$mod[[gr]][[y]]
-        indicator_names <- colnames(mod@nuisance$model)[grepl("_h$|_c$",colnames(mod@nuisance$model))]
-        indicator_names <- indicator_names[mapply(function(i)grepl(i,as.character(mod@nuisance$formula[-2])[2]),indicator_names)]
-        do.call(rbind, lapply(FUN=function(indicator_name){
-          if(any(grepl("weekpart",colnames(mod@nuisance$model))) & !any(grepl("^s$",colnames(mod@nuisance$model)))){
-            df_test <- mod@nuisance$model[1,]
-            df_test <- data.frame(as.data.frame(df_test[!grepl("^weekpart|^daypart|^yearpart",colnames(mod@nuisance$model))]),
-                                  "daypart"=(1:(24/hours_of_each_daypart))-1,
-                                  "weekpart"=(1:(168/hours_of_each_daypart))-1)
-            df_test$weekhour <- df_test$weekpart * hours_of_each_daypart
-            df_test <- add_fs_weekpart(df=df_test,hours_of_each_daypart = hours_of_each_daypart,
-                                       weekhour_column = "weekhour")
-            df_test <- add_fs_daypart(df=df_test,daypart_column = "daypart", hours_of_each_daypart = hours_of_each_daypart)
-            df_test <- do.call(rbind, lapply( seq(24*15,168*48,24*30)-1, #Monthly from day 15.
-                                              function(x){cbind(df_test,"yearhour"=x)}
-            ))
-            df_test <- add_fs_yearpart(df=df_test,yearhour_column = "yearhour")
-            df_test$s <- "01"
-            # df_test$daypart <- as.factor(df_test$daypart)
-          } else if(any(grepl("^s$",colnames(mod@nuisance$model)))){
-            df_test <- mod@nuisance$model[1,]
-            df_test <- data.frame(as.data.frame(df_test[!grepl("^s$|^daypart|^weekpart",colnames(mod@nuisance$model))]),
-                                  "daypart"=(1:(24/hours_of_each_daypart))-1,
-                                  "weekpart"=(1:(168/hours_of_each_daypart))-1)
-            df_test$weekhour <- df_test$weekpart * hours_of_each_daypart
-            df_test <- add_fs_weekpart(df=df_test,hours_of_each_daypart = hours_of_each_daypart,
-                                       weekhour_column = "weekhour")
-            df_test <- add_fs_daypart(df=df_test,daypart_column = "daypart", hours_of_each_daypart = hours_of_each_daypart)
-            df_test <- do.call(rbind, lapply( sort(unique(mod@nuisance$model$s)),#gsub("s","",colnames(mod@nuisance$model)[grepl("^s[0-9]{2}$",colnames(mod@nuisance$model))])),
-                                              function(x){cbind(df_test,"s"=x)}
-            ))
-            df_test$yearhour <- 0
-          } else {
-            df_test <- mod@nuisance$model[1,]
-            df_test$daypart <- 0
-            df_test$weekpart <- 0
-            df_test$weekhour <- 0
-            df_test$yearhour <- 0
-            df_test$s <- "01"
-          }
-          df_test$daypart <- as.factor(df_test$daypart)
-          df_test$weekpart <- as.factor(df_test$weekpart)
-          df_test[,grepl("_h|_c",colnames(df_test))] <- 0
-          no_weather <- (predict(mod, as.matrix(model.matrix(mod@nuisance$formula[-2],df_test)))[,1])
-          df_test[,indicator_name] <- 1
-          # if(grepl("^temperature",indicator_name)==T){
-          #   df_test[,gsub("_","_status_",indicator_name)] <- 1
-          # }
-          indicator_value <- (predict(mod, as.matrix(model.matrix(mod@nuisance$formula[-2],df_test)))[,1] - no_weather)
-          df_result <- data.frame(
-            "indicator" = indicator_value,
-            "indicatorName" = gsub("_c$|_h$","",indicator_name),
-            "mode" = if(grepl("_h$",indicator_name)) "heating" else if(grepl("_c$",indicator_name)) "cooling" else "all",
-            "dayPart" = df_test$daypart,
-            "weekPart" = df_test$weekpart,
-            "weekHour" = df_test$weekhour,
-            "yearHour" = df_test$yearhour,
-            "s" = df_test$s,
-            "month" = strftime(as.POSIXct("2020-01-01 00:00:00")+(df_test$yearhour)*3600,format="%b"),
-            "rollYear" = y,
-            "iniDate" = if(y=="last_period"){NA}else{as.Date(paste0(roll_year[1],"01"),"%Y%m%d")},
-            "endDate" = if(y=="last_period"){NA}else{as.Date(paste0(roll_year[2],"01"),"%Y%m%d") + months(1) - days(1)}
-          )
-        }, indicator_names))
-      }
-    ))
-    
-    tbal_indicators <- do.call(rbind,lapply(
-      X=names(daily_df_roll_years),
-      function(y){
-        roll_year <- unlist(strsplit(y,split = "_"))
-        mod <- characterization$mod[[gr]][[y]]
-        do.call(rbind, lapply(FUN=function(mode_){
-          if(hours_of_each_daypart<24 & !any(grepl("^s$",colnames(mod@nuisance$model)))){
-            df_test <- data.frame(mod@nuisance$model[1,],
-                                  "daypart"=1:(24/hours_of_each_daypart)-1,
-                                  "weekpart"=0:((168/hours_of_each_daypart)-1))
-            df_test$weekhour <- df_test$weekpart * hours_of_each_daypart
-            df_test <- do.call(rbind, lapply( seq(1,168*52,24*30)-1,
-                                              function(x){cbind(df_test,"yearhour"=x)}
-            ))
-            df_test$s <- "01"
-            # df_test$daypart <- as.factor(df_test$daypart)
-          } else if(any(grepl("^s$",colnames(mod@nuisance$model)))){
-            df_test <- mod@nuisance$model[1,]
-            df_test <- data.frame(as.data.frame(df_test[!grepl("^s$|^daypart|^weekpart",colnames(mod@nuisance$model))]),
-                                  "daypart"=(1:(24/hours_of_each_daypart))-1,
-                                  "weekpart"=(1:(168/hours_of_each_daypart))-1)
-            df_test$weekhour <- df_test$weekpart * hours_of_each_daypart
-            df_test <- add_fs_weekpart(df=df_test,hours_of_each_daypart = hours_of_each_daypart,
-                                       weekhour_column = "weekhour")
-            df_test <- add_fs_daypart(df=df_test,daypart_column = "daypart", hours_of_each_daypart = hours_of_each_daypart)
-            df_test <- do.call(rbind, lapply( sort(unique(mod@nuisance$model$s)),#gsub("s","",colnames(mod@nuisance$model)[grepl("^s[0-9]{2}$",colnames(mod@nuisance$model))])),
-                                              function(x){cbind(df_test,"s"=x)}
-            ))
-            df_test$yearhour <- 0
-            # df_test$daypart <- as.factor(df_test$daypart)
-          } else {
-            df_test <- mod@nuisance$model[1,]
-            df_test$daypart <- 0
-            df_test$weekpart <- 0
-            df_test$weekhour <- 0
-            df_test$yearhour <- 0
-            df_test$s <- "01"
-          }
-          df_test$daypart <- as.factor(df_test$daypart)
-          df_test$weekpart <- as.factor(df_test$weekpart)
-          e <- (as.integer(as.character(df_test$daypart))+1)#+max(as.numeric(as.character(df_test$daypart))+1)*(as.numeric(as.character(df_test$s))-1)
-          df_result <- data.frame(
-            "indicator" = if(mode_=="heating"){
-              mod@nuisance$tbal[e] - mod@nuisance$hysteresis[e]
-            } else {
-              mod@nuisance$tbal[e] + mod@nuisance$hysteresis[e]
-            },
-            "indicatorName" = "balancePoint",
-            "mode" = mode_,
-            "dayPart" = df_test$daypart,
-            "weekPart" = df_test$weekpart,
-            "weekHour" = df_test$weekhour,
-            "yearHour" = df_test$yearhour,
-            "s" = df_test$s,
-            "month" = strftime(as.POSIXct("2020-01-01 00:00:00")+(df_test$yearhour)*3600,format="%b"),
-            "rollYear" = y,
-            "iniDate" = if(y=="last_period"){NA}else{as.Date(paste0(roll_year[1],"01"),"%Y%m%d")},
-            "endDate" = if(y=="last_period"){NA}else{as.Date(paste0(roll_year[2],"01"),"%Y%m%d") + months(1) - days(1)}
-          )
-          df_result$indicator <- ifelse(mod@nuisance$seasonalities_wdep[as.numeric(as.character(df_result$s))]==1,df_result$indicator,NA)
-          df_result
-        }, c("heating","cooling")))
-      }
-    ))
-    
-    time_constant_indicators <- do.call(rbind,lapply(
-      X=names(daily_df_roll_years),
-      function(y){
-        roll_year <- unlist(strsplit(y,split = "_"))
-        mod <- characterization$mod[[gr]][[y]]
-        do.call(rbind, lapply(FUN=function(mode_){
-          if(hours_of_each_daypart<24 & !any(grepl("^s$",colnames(mod@nuisance$model)))){
-            df_test <- data.frame(mod@nuisance$model[1,],
-                                  "daypart"=1:(24/hours_of_each_daypart)-1,
-                                  "weekpart"=0:((168/hours_of_each_daypart)-1))
-            df_test$weekhour <- df_test$weekpart * hours_of_each_daypart
-            df_test <- do.call(rbind, lapply( seq(1,168*52,24*30)-1,
-                                              function(x){cbind(df_test,"yearhour"=x)}
-            ))
-            df_test$s <- "01"
-            # df_test$daypart <- as.factor(df_test$daypart)
-          } else if(any(grepl("^s$",colnames(mod@nuisance$model)))){
-            df_test <- mod@nuisance$model[1,]
-            df_test <- data.frame(as.data.frame(df_test[!grepl("^s$|^daypart|^weekpart",colnames(mod@nuisance$model))]),
-                                  "daypart"=(1:(24/hours_of_each_daypart))-1,
-                                  "weekpart"=(1:(168/hours_of_each_daypart))-1)
-            df_test$weekhour <- df_test$weekpart * hours_of_each_daypart
-            df_test <- add_fs_weekpart(df=df_test,hours_of_each_daypart = hours_of_each_daypart,
-                                       weekhour_column = "weekhour")
-            df_test <- add_fs_daypart(df=df_test,daypart_column = "daypart", hours_of_each_daypart = hours_of_each_daypart)
-            df_test <- do.call(rbind, lapply( sort(unique(mod@nuisance$model$s)),#gsub("s","",colnames(mod@nuisance$model)[grepl("^s[0-9]{2}$",colnames(mod@nuisance$model))])),
-                                              function(x){cbind(df_test,"s"=x)}
-            ))
-            df_test$yearhour <- 0
-            # df_test$daypart <- as.factor(df_test$daypart)
-          } else {
-            df_test <- mod@nuisance$model[1,]
-            df_test$daypart <- 0
-            df_test$weekpart <- 0
-            df_test$weekhour <- 0
-            df_test$yearhour <- 0
-            df_test$s <- "01"
-          }
-          df_test$daypart <- as.factor(df_test$daypart)
-          df_test$weekpart <- as.factor(df_test$weekpart)
-          #e <- (as.integer(as.character(df_test$daypart))+1)#+max(as.numeric(as.character(df_test$daypart))+1)*(as.numeric(as.character(df_test$s))-1)
-          df_result <- data.frame(
-            "indicator" = if(mode_=="heating"){
-              mod@nuisance$thermal_time_constant# * mod@nuisance$seasonalities_wdep[e]
-            } else {
-              mod@nuisance$thermal_time_constant# * mod@nuisance$seasonalities_wdep[e]
-            },
-            "indicatorName" = "thermalTimeConstant",
-            "mode" = mode_,
-            "dayPart" = df_test$daypart,
-            "weekPart" = df_test$weekpart,
-            "weekHour" = df_test$weekhour,
-            "yearHour" = df_test$yearhour,
-            "s" = df_test$s,
-            "month" = strftime(as.POSIXct("2020-01-01 00:00:00")+(df_test$yearhour)*3600,format="%b"),
-            "rollYear" = y,
-            "iniDate" = if(y=="last_period"){NA}else{as.Date(paste0(roll_year[1],"01"),"%Y%m%d")},
-            "endDate" = if(y=="last_period"){NA}else{as.Date(paste0(roll_year[2],"01"),"%Y%m%d") + months(1) - days(1)}
-          )
-          df_result$indicator <- ifelse(mod@nuisance$seasonalities_wdep[as.numeric(as.character(df_result$s))]==1,df_result$indicator,NA)
-          df_result
-        }, c("heating","cooling")))
-      }
-    ))
-    
-    weather_indicators <- rbind(weather_indicators, tbal_indicators, time_constant_indicators)
-    
-    baseload_indicators <- do.call(rbind,lapply(
-      X=names(daily_df_roll_years),
-      function(y){
-        roll_year <- unlist(strsplit(y,split = "_"))
-        mod <- characterization$mod[[gr]][[y]]
-        if(any(grepl("weekpart",colnames(mod@nuisance$model))) & !any(grepl("^s$",colnames(mod@nuisance$model)))){
-          df_test <- mod@nuisance$model[1,]
-          df_test <- data.frame(as.data.frame(df_test[!grepl("^weekpart|^daypart|^yearpart",colnames(mod@nuisance$model))]),
-                                "daypart"=(1:(24/hours_of_each_daypart))-1,
-                                "weekpart"=(1:(168/hours_of_each_daypart))-1)
-          df_test$weekhour <- df_test$weekpart * hours_of_each_daypart
-          df_test <- add_fs_weekpart(df=df_test,hours_of_each_daypart = hours_of_each_daypart,
-                                     weekhour_column = "weekhour")
-          df_test <- add_fs_daypart(df=df_test,daypart_column = "daypart", hours_of_each_daypart = hours_of_each_daypart)
-          df_test <- do.call(rbind, lapply( seq(24*15,168*52,24*30)-1, #Monthly from day 15.
-                                            function(x){cbind(df_test,"yearhour"=x)}
-          ))
-          df_test <- add_fs_yearpart(df=df_test,yearhour_column = "yearhour")
-          df_test$s <- "01"
-          # df_test$daypart <- as.factor(df_test$daypart)
-        } else if(any(grepl("^s$",colnames(mod@nuisance$model)))){
-          df_test <- mod@nuisance$model[1,]
-          df_test <- data.frame(as.data.frame(df_test[!grepl("^s$|^daypart|^weekpart",colnames(mod@nuisance$model))]),
-                                "daypart"=(1:(24/hours_of_each_daypart))-1,
-                                "weekpart"=(1:(168/hours_of_each_daypart))-1)
-          df_test$weekhour <- df_test$weekpart * hours_of_each_daypart
-          df_test <- add_fs_weekpart(df=df_test,hours_of_each_daypart = hours_of_each_daypart,
-                                     weekhour_column = "weekhour")
-          df_test <- add_fs_daypart(df=df_test,daypart_column = "daypart", hours_of_each_daypart = hours_of_each_daypart)
-          df_test <- do.call(rbind, lapply( sort(unique(mod@nuisance$model$s)),#gsub("s","",colnames(mod@nuisance$model)[grepl("^s[0-9]{2}$",colnames(mod@nuisance$model))])),
-                                            function(x){cbind(df_test,"s"=x)}
-          ))
-          df_test$yearhour <- 0
-          # df_test$daypart <- as.factor(df_test$daypart)
-          # df_test$daypart <- as.factor(df_test$daypart)
-        } else {
-          df_test <- mod@nuisance$model[1,]
-          df_test$daypart <- 0 
-          df_test$weekpart <- 0
-          df_test$weekhour <- 0
-          df_test$yearhour <- 0
-        }
-        df_test$daypart <- as.factor(df_test$daypart)
-        df_test$weekpart <- as.factor(df_test$weekpart)
-        df_test[,grepl("windSpeed|_h|_c",colnames(df_test))] <- 0
-        no_weather <- (predict(mod, as.matrix(model.matrix(mod@nuisance$formula[-2],df_test)))[,1])
-        df_result <- data.frame(
-          "indicator" = no_weather,
-          "indicatorName" = df_test$weekpart,
-          "mode" = "always",
-          "dayPart" = df_test$daypart,
-          "weekPart" = df_test$weekpart,
-          "weekHour" = df_test$weekhour,
-          "yearHour" = df_test$yearhour,
-          "s" = df_test$s,
-          "month" = strftime(as.POSIXct("2020-01-01 00:00:00")+(df_test$yearhour)*3600,format="%b"),
-          "rollYear" = y,
-          "iniDate" = if(y=="last_period"){NA}else{as.Date(paste0(roll_year[1],"01"),"%Y%m%d")},
-          "endDate" = if(y=="last_period"){NA}else{as.Date(paste0(roll_year[2],"01"),"%Y%m%d") + months(1) - days(1)}
-        )
-      }
-    ))
-    
-    # ggplot(consumptions) + geom_line(aes(as.Date(paste0("2020-",monthday)),total)) + geom_line(aes(as.Date(paste0("2020-",monthday)),no_weather_dep),col="green") +
-    #   geom_line(aes(as.Date(paste0("2020-",monthday)),weather_dep_heating),col="blue") + geom_line(aes(as.Date(paste0("2020-",monthday)),weather_dep_cooling),col="red") +
-    #   facet_wrap(~end_date,ncol=1) + scale_x_date(date_labels = "%b")
-    # ggplot(weather_indicators) + geom_line(aes(end_date,indicator, col=daypart)) + facet_grid(indicator_name~mode, scales = "free_y")
-    # ggplot(baseload_indicators) + geom_line(
-    #   aes(as.numeric(as.character(factor(indicator_name,labels=0:6)))*24 + as.numeric(daypart)*characterization$config_aggregator$hours_of_each_daypart,indicator)) +
-    #   facet_wrap(~end_date,ncol=1)
-    
-    return(list(
-      "consumption_results"= consumptions, 
-      "weather_dep_indicators" = weather_indicators,
-      "baseload_indicators" = baseload_indicators)
-    )
-    
-  })
-  
-  names(results_all) <- grs
-  check_empty <- mapply(function(i)!is.null(results_all[[i]]),grs)
-  results_all <- results_all[check_empty]
-  grs <- grs[check_empty]
-  consumptions <- do.call(rbind,lapply(grs, function(i){cbind(results_all[[i]]$consumption_results,"group"=i)}))
-  weather_indicators <- do.call(rbind,lapply(grs, function(i){cbind(results_all[[i]]$weather_dep_indicators,"group"=i)}))
-  baseload_indicators <- do.call(rbind,lapply(grs, function(i){cbind(results_all[[i]]$baseload_indicators,"group"=i)}))
-  colnames(consumptions)[colnames(consumptions)=="group"] <- group_column
-  colnames(weather_indicators)[colnames(weather_indicators)=="group"] <- group_column
-  colnames(baseload_indicators)[colnames(baseload_indicators)=="group"] <- group_column
-  
-  weather_indicators$indicatorNameUnit <- factor(weather_indicators$indicatorName, 
-                                                 c("temperature","temperature_lp","balancePoint",
-                                                   "windSpeed","GHI","thermalTimeConstant"),
-                                                 c('"U"[raw]*"[W/m"^2*"K]"','"U"[lp]*"[W/m"^2*"K]"','T^"bal"*"["*degree*"C]"',
-                                                   'I^"air"*"[Ws/m"^3*"K]"','I^"sol"*"[m"^"4"*"]"','tau*"[h]"'))
   
   # Consumption_summary_per_year
-  consumptions$agg <- paste(consumptions[,group_column],consumptions$rollYear,sep="~")
+  consumptions$agg <- paste(consumptions$year,sep="~")
   consumptions_summary <- smartAgg(consumptions, "agg", 
                                    function(x){mean(x,na.rm=T)*8760/1000}, # W/m2 -> kWh/m2year
                                    c("total", "baseload", "heating", "cooling", "holidays","totalDuringCovidLockdown","covid",
                                      "coolingEnvelope","coolingVentilation","coolingAirInfiltration",
                                      "heatingEnvelope","heatingVentilation","heatingAirInfiltration"),
                                    function(x){x[1]}, 
-                                   c("tariff", "rollYear"),
+                                   c("year"),
                                    
                                    catN=F)
   consumptions_summary_m2 <- consumptions_summary[,c("total", "baseload", "heating", "cooling","holidays","totalDuringCovidLockdown","covid",
@@ -2107,11 +1581,6 @@ indicators_estimator <- function(characterization, meteo_df, area=1){
     consumptions_summary[,c("total", "baseload", "heating", "cooling","holidays","totalDuringCovidLockdown","covid",
                             "coolingEnvelope","coolingVentilation","coolingAirInfiltration",
                             "heatingEnvelope","heatingVentilation","heatingAirInfiltration")] * area #kWh/m2year -> kWh/year
-  roll_year <- do.call(rbind,strsplit(consumptions_summary$rollYear,"_"))
-  consumptions_summary <- cbind(consumptions_summary,data.frame(
-    "iniDate"=ifelse(consumptions_summary$rollYear=="last_period",NA,as.Date(paste0(roll_year[,1],"01"),"%Y%m%d")),
-    "endDate"=ifelse(consumptions_summary$rollYear=="last_period",NA,as.Date(paste0(roll_year[,2],"01"),"%Y%m%d") + months(1) - days(1))
-  ))
   consumptions_summary <- cbind(consumptions_summary,mapply(
     c("baseload","heating","cooling","holidays","covid",
       "coolingEnvelope","coolingVentilation","coolingAirInfiltration",
@@ -2138,12 +1607,10 @@ indicators_estimator <- function(characterization, meteo_df, area=1){
     c("baseloadPercentage", "heatingPercentage", "coolingPercentage","holidaysPercentage","covidPercentage",
       "coolingEnvelopePercentage","coolingVentilationPercentage","coolingAirInfiltrationPercentage",
       "heatingEnvelopePercentage","heatingVentilationPercentage","heatingAirInfiltrationPercentage")
-  consumptions_summary$iniDate <- as.Date(consumptions_summary$iniDate)
-  consumptions_summary$endDate <- as.Date(consumptions_summary$endDate)
   consumptions_summary <- cbind(consumptions_summary, consumptions_summary_m2)
   
   # Consumption summary per natural month and part of day
-  consumptions$agg <- paste(consumptions[,group_column],consumptions$rollYear,consumptions$month,consumptions$dayHour,sep="~")
+  consumptions$agg <- paste(consumptions$year,consumptions$month,consumptions$dayHour,sep="~")
   consumptions_summary_detailed <- smartAgg(consumptions, "agg",
                                             function(x){mean(x,na.rm=T)*720/hours_of_each_daypart/1000}, # W -> kWh/(month*daypart)
                                             c("total", "baseload", "heating", "cooling","holidays","covid","totalDuringCovidLockdown",
@@ -2151,7 +1618,7 @@ indicators_estimator <- function(characterization, meteo_df, area=1){
                                               "heatingEnvelope","heatingVentilation","heatingAirInfiltration"
                                             ),
                                             function(x){x[1]},
-                                            c("tariff", "rollYear", "dayHour", "month"),
+                                            c("year", "dayHour", "month"),
                                             catN=F)
   consumptions_summary_detailed_m2 <- consumptions_summary_detailed[,
                                                                     c("total", "baseload", "heating", "cooling","holidays","totalDuringCovidLockdown","covid",
@@ -2164,11 +1631,6 @@ indicators_estimator <- function(characterization, meteo_df, area=1){
     consumptions_summary_detailed[,c("total", "baseload", "heating", "cooling","holidays","covid","totalDuringCovidLockdown",
                                      "coolingEnvelope","coolingVentilation","coolingAirInfiltration",
                                      "heatingEnvelope","heatingVentilation","heatingAirInfiltration")] * area
-  roll_year <- do.call(rbind,strsplit(consumptions_summary_detailed$rollYear,"_"))
-  consumptions_summary_detailed <- cbind(consumptions_summary_detailed,data.frame(
-    "iniDate"=ifelse(consumptions_summary_detailed$rollYear=="last_period",NA,as.Date(paste0(roll_year[,1],"01"),"%Y%m%d")),
-    "endDate"=ifelse(consumptions_summary_detailed$rollYear=="last_period",NA,as.Date(paste0(roll_year[,2],"01"),"%Y%m%d") + months(1) - days(1))
-  ))
   consumptions_summary_detailed <- cbind(consumptions_summary_detailed,mapply(
     c("baseload","heating","cooling","holidays","covid",
       "coolingEnvelope","coolingVentilation","coolingAirInfiltration",
@@ -2195,8 +1657,6 @@ indicators_estimator <- function(characterization, meteo_df, area=1){
     c("baseloadPercentage", "heatingPercentage", "coolingPercentage","holidaysPercentage","covidPercentage",
       "coolingEnvelopePercentage","coolingVentilationPercentage","coolingAirInfiltrationPercentage",
       "heatingEnvelopePercentage","heatingVentilationPercentage","heatingAirInfiltrationPercentage")
-  consumptions_summary_detailed$iniDate <- as.Date(consumptions_summary_detailed$iniDate)
-  consumptions_summary_detailed$endDate <- as.Date(consumptions_summary_detailed$endDate)
   consumptions_summary_detailed <- cbind(consumptions_summary_detailed, consumptions_summary_detailed_m2)
   
   # Multiply the raw consumption data by the area (W/m² to kWh) and delete the aggregation column
@@ -2234,8 +1694,6 @@ indicators_estimator <- function(characterization, meteo_df, area=1){
     "consumption_disaggregation" = consumptions,
     "consumption_disaggregation_summary" = consumptions_summary,
     "consumption_disaggregation_summary_detailed" = consumptions_summary_detailed,
-    "weather_dep_indicators" = weather_indicators,
-    "baseload_indicators" = baseload_indicators,
     "daypart_values" = daypart_values)
   )
 }
