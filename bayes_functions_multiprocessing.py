@@ -8,6 +8,8 @@ from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import KFold
 from math import sqrt
 import subprocess
+import rpy2.robjects as robjects
+from rpy2.robjects import pandas2ri
 
 def bayesian_model_comparison (df):
     # Preprocess
@@ -377,7 +379,7 @@ def multiprocessing_bayesian_comparison(df):
     df.to_csv("/root/benedetto/results/buildings/" + edif + ".csv", index=False)
     subprocess.run(["Rscript", "ashrae_preprocess_server.R", edif, building_id])
 
-    df_preprocessed = pd.read_csv("/root/benedetto/results/buildings" + edif + "_preprocess.csv")
+    df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + edif + "_preprocess.csv")
     print(df_preprocessed.head())
 
     model_results = bayesian_model_comparison(df_preprocessed)
@@ -391,4 +393,41 @@ def multiprocessing_bayesian_comparison(df):
         final_export = model_results
 
     final_export.to_csv("/root/benedetto/results/bayes_results.csv", index = False)
+    
+
+def multiprocessing_bayesian_comparison_noR(df):
+
+    building_id = df.columns[1]
+    df.columns = ['t', 'total_electricity', 'outdoor_temp']
+    
+    # source the R file with the needed functions
+    r = robjects.r
+    r['source']('functions_updated.R')
+    clustering_function_r = robjects.globalenv['clustering_load_curves']
+    
+    # Clustering
+    #converting it into r object for passing into r function
+    df_r = pandas2ri.ri2py(df)
+    #Invoking the R function and getting the result
+    df_result_r = filter_country_function_r(df_r, 'USA')
+    
+    # edif = str(building_id)
+    # df.to_csv("/root/benedetto/results/buildings/" + edif + ".csv", index=False)
+    # subprocess.run(["Rscript", "ashrae_preprocess_server.R", edif, building_id])
+    # 
+    # df_preprocessed = pd.read_csv("/root/benedetto/results/buildings" + edif + "_preprocess.csv")
+    print(df_preprocessed.head())
+
+    model_results = bayesian_model_comparison(df_preprocessed)
+    model_results['id'] = building_id
+    # read the csv with the values from previous buildings
+    # append to that Excel
+    try:
+        dat = pd.read_csv("/root/benedetto/results/bayes_results.csv")
+        final_export = dat.append(model_results)
+    except:
+        final_export = model_results
+
+    final_export.to_csv("/root/benedetto/results/bayes_results.csv", index = False)
+
 
