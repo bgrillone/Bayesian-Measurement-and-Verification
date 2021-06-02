@@ -14,14 +14,15 @@ library(lubridate)
 setwd("/Users/beegroup/Github/Bayes-M&V")
 source("preprocessing/functions_updated.R")
 
-id = 'multilevel_hourly'
-df <- fread("data/Id50_hourly.csv",data.table = F)
-head(df)
-df <- df[,2:4]
-colnames(df) <- c("t","total_electricity", "outdoor_temp")
-df$t <- as.POSIXct(df$t,tz="Europe/Madrid")
-ggplotly(ggplot(df) + geom_line(aes(t,total_electricity)))
+a <- commandArgs(trailingOnly = T)
+df <- read.csv(paste0(a[1],".csv"), stringsAsFactors = F)
+#df <- read.csv("current_df.csv", stringsAsFactors = F)
 
+id = 'multilevel_hourly'
+df$t <- as.POSIXct(df$t,tz="Europe/Madrid", format = "%Y-%m-%d %H:%M:%S")
+df <- df[complete.cases(df$t),]
+ggplotly(ggplot(df) + geom_line(aes(t,total_electricity)))
+print(getwd())
 clustering <- clustering_load_curves(
   df = df,
   tz_local = "Europe/Madrid",
@@ -33,16 +34,16 @@ clustering <- clustering_load_curves(
   n_dayparts = 8,
   norm_specs = NULL,
   input_vars = c("load_curves"), # POSSIBLE INPUTS: c("load_curves", "days_weekend", "days_of_the_week", "daily_cons", "daily_temp"),
-  centroids_plot_file = "clustering.pdf",
-  bic_plot_file = "bic.pdf",
+  centroids_plot_file = NULL,
+  bic_plot_file = NULL,
   # centroids_plot_file = NULL,
   # bic_plot_file = NULL,#"bic.pdf",
   latex_font = F,
   plot_n_centroids_per_row=2,
   minimum_days_for_a_cluster = 10,
   force_plain_cluster = F,
-  filename_prefix=paste(id,sep="~"),
-  folder_plots="clustering_plots/"
+  filename_prefix=paste(id,sep="~")#,
+  #folder_plots="clustering_plots/"
 )
 
 df_centroids <- clustering$centroids
@@ -51,8 +52,8 @@ df_centroids <- clustering$centroids
 classification <- classifier_load_curves(
   df = df,
   df_centroids = df_centroids[,!(colnames(df_centroids) %in% c("s"))],
-  clustering_mod = clustering[["mod"]],
-  clustering_mod_calendar = clustering[["mod_calendar"]],
+  #clustering_mod = clustering[["mod"]],
+  #clustering_mod_calendar = clustering[["mod_calendar"]],
   tz_local = "Europe/Madrid",
   time_column = "t",
   value_column = "total_electricity",
@@ -63,9 +64,9 @@ classification <- classifier_load_curves(
   input_vars = clustering$input_vars,
   plot_n_centroids_per_row = 2,
   # plot_file = NULL,
-  plot_file = "classification.pdf",
-  filename_prefix=paste(id,sep="~"),
-  folder_plots="clustering_plots/"
+  plot_file = NULL,
+  filename_prefix= NULL,
+  #folder_plots= NULL
 )
 
 df_centroids <- reshape2::melt(df_centroids,id_vars=c("s"))
@@ -103,7 +104,7 @@ characterization <- characterizer(
   GHI_column = "GHI",
   intercept_column = "weekday",
   windSpeed_column = "windSpeed",
-  date_column = "local_date",
+  #date_column = "local_date",
   group_column ="all",
   hours_of_each_daypart = 4,
   centroids = df_centroids,
@@ -111,7 +112,7 @@ characterization <- characterizer(
   classification = classification[,c("date","s")]
 )
 
-indicators <- indicators_estimator(characterization, meteo_df = df[,c("t","outdoor_temp","windSpeed","GHI")])
+#indicators <- indicators_estimator(characterization, meteo_df = df[,c("t","outdoor_temp","windSpeed","GHI")])
 
 ggplot(characterization$df) +
   geom_point(aes(outdoor_temp,total_electricity), size=0.4) +
@@ -135,8 +136,9 @@ ggplot(characterization$df) +
   ylab("electricity [kWh]") + xlab("temperature [ºC]") +
   theme_bw()
 
-df_export <- characterization$df %>% select(t, total_electricity, outdoor_temp, s, daypart, weekday, outdoor_temp_h, outdoor_temp_lp_h,
-                                            outdoor_temp_c, outdoor_temp_lp_c,starts_with("daypart_fs"))
-row.names(df_export) <- NULL
+df_export <- characterization$df %>% select(t, total_electricity, outdoor_temp, s, daypart,
+                                            #weekday, outdoor_temp_lp_h, outdoor_temp_lp_c,
+                                            outdoor_temp_h, outdoor_temp_c, starts_with("daypart_fs"))
+
 df_export <- df_export[complete.cases(df_export),]
-write.csv(df_export, file = "data/Id50_preprocessed_new.csv")
+write.csv(df_export,paste0(a[1],"_preprocess.csv"), row.names = F)

@@ -196,7 +196,7 @@ norm_load_curves <- function(df,tz_local,time_column="t",value_column="v",temper
   
   if(n_dayparts==24){
     df_agg_to_spread <- df_agg[,c("day","value","dayhour")]
-    df_spread<-spread(df_agg_to_spread,"dayhour","value")
+    df_spread<- spread(df_agg_to_spread,"dayhour","value")
   } else {
     df_agg_to_spread <- df_agg[,c("day","value","daypart")]
     df_agg_to_spread <- aggregate(data.frame("value"=df_agg_to_spread$value),by=list("day"=df_agg_to_spread$day,"daypart"=df_agg_to_spread$daypart),FUN=mean)
@@ -234,12 +234,12 @@ clustering_load_curves <- function(df, group, tz_local, time_column, value_colum
   # df = df_
   # group = "tariff"
   # tz_local = "Europe/Madrid"
-  # time_column = "time"
-  # value_column = "powerContractM2"
-  # temperature_column = "temperature"
+  # time_column = "t"
+  # value_column = "total_electricity"
+  # temperature_column = "outdoor_temp"
   # k=2:6
   # perc_cons = T
-  # n_dayparts = 6
+  # n_dayparts = 8
   # norm_specs = NULL
   # input_vars = c("load_curves") # POSSIBLE INPUTS: c("load_curves", "days_weekend", "days_of_the_week", "daily_cons", "daily_temp"),
   # centroids_plot_file = "clustering.pdf"
@@ -248,10 +248,11 @@ clustering_load_curves <- function(df, group, tz_local, time_column, value_colum
   # # bic_plot_file = NULL
   # latex_font = F
   # plot_n_centroids_per_row=2
-  # minimum_days_for_a_cluster = 0
+  # minimum_days_for_a_cluster = 10
   # force_plain_cluster = F
-  # filename_prefix=paste(postal_code,economic_sector,sep="~")
-  
+  # filename_prefix=paste(id,sep="~")
+  # folder_plots="clustering_plots/"
+
   # Only cluster days in periods without large weather dependence, without holidays and not during the covid lockdown
   if(sum(month(df[,time_column]) %in% 1:12)>10){
     df <- df[month(df[,time_column]) %in% c(4,5,9,10),]
@@ -451,23 +452,22 @@ clustering_load_curves <- function(df, group, tz_local, time_column, value_colum
 classifier_load_curves <- function(df, df_centroids, clustering_mod, clustering_mod_calendar, tz_local, time_column, value_column, temperature_column, 
                                    perc_cons, n_dayparts, filename_prefix, norm_specs=NULL, input_vars, plot_n_centroids_per_row=2, plot_file=NULL, folder_plots=""){
   
-  # df_centroids <- do.call(rbind, lapply(names(clustering),function(i){clustering[[i]]$centroids}))
-  # df = df_
-  # group = "tariff"
-  # clustering_mod = setNames(lapply(names(clustering),function(i)clustering[[i]][["mod"]]),names(clustering))
-  # clustering_mod_calendar = setNames(lapply(names(clustering),function(i)clustering[[i]][["mod_calendar"]]),names(clustering))
+  # df = df
   # df_centroids = df_centroids[,!(colnames(df_centroids) %in% c("s"))]
+  # clustering_mod = clustering[["mod"]]
+  # clustering_mod_calendar = clustering[["mod_calendar"]]
   # tz_local = "Europe/Madrid"
-  # time_column = "time"
-  # value_column = "powerContractM2"
-  # temperature_column = "temperature"
-  # perc_cons = setNames(lapply(names(clustering),function(i)clustering[[i]][["perc_cons"]]),names(clustering))
-  # n_dayparts = setNames(lapply(names(clustering),function(i)clustering[[i]][["n_dayparts"]]),names(clustering))
-  # norm_specs = setNames(lapply(names(clustering),function(i)clustering[[i]][["norm_specs"]]),names(clustering))
-  # input_vars = setNames(lapply(names(clustering),function(i)clustering[[i]][["input_vars"]]),names(clustering))
+  # time_column = "t"
+  # value_column = "total_electricity"
+  # temperature_column = "outdoor_temp"
+  # perc_cons = clustering$perc_cons
+  # n_dayparts = clustering$n_dayparts
+  # norm_specs = clustering$norm_specs
+  # input_vars = clustering$input_vars
   # plot_n_centroids_per_row = 2
-  # plot_file = "classification.pdf"
-  # filename_prefix=paste(postal_code,economic_sector,sep="~")
+  # plot_file = NULL
+  # filename_prefix= NULL
+  # folder_plots= NULL
   
   df_centroids_ini <- df_centroids
   
