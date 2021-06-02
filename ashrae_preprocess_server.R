@@ -15,7 +15,7 @@ setwd("/root/benedetto/Bayesian-Measurement-and-Verification")
 source("preprocessing/functions_updated.R")
 
 a <- commandArgs(trailingOnly = T)
-df <- read.csv(paste0("root/benedetto/results/buildings/", a[1],".csv"), stringsAsFactors = F)
+df <- read.csv(paste0("/root/benedetto/results/buildings/", a[1],".csv"), stringsAsFactors = F)
 #df <- read.csv("current_df.csv", stringsAsFactors = F)
 
 id = 'multilevel_hourly'

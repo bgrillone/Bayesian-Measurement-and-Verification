@@ -374,10 +374,10 @@ def multiprocessing_bayesian_comparison(df):
     building_id = df.columns[1]
     df.columns = ['t', 'total_electricity', 'outdoor_temp']
     edif = str(building_id)
-    df.to_csv("root/benedetto/results/buildings/" + edif + ".csv", index=False)
+    df.to_csv("/root/benedetto/results/buildings/" + edif + ".csv", index=False)
     subprocess.run(["Rscript", "ashrae_preprocess_server.R", edif, building_id])
 
-    df_preprocessed = pd.read_csv("root/benedetto/results/buildings" + edif + "_preprocess.csv")
+    df_preprocessed = pd.read_csv("/root/benedetto/results/buildings" + edif + "_preprocess.csv")
     print(df_preprocessed.head())
 
     model_results = bayesian_model_comparison(df_preprocessed)
@@ -385,10 +385,10 @@ def multiprocessing_bayesian_comparison(df):
     # read the csv with the values from previous buildings
     # append to that Excel
     try:
-        dat = pd.read_csv("root/benedetto/results/bayes_results.csv")
+        dat = pd.read_csv("/root/benedetto/results/bayes_results.csv")
         final_export = dat.append(model_results)
     except:
         final_export = model_results
 
-    final_export.to_csv("root/benedetto/results/bayes_results.csv", index = False)
+    final_export.to_csv("/root/benedetto/results/bayes_results.csv", index = False)
 
