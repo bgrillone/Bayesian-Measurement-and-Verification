@@ -11,7 +11,7 @@ library(GA)
 library(penalized)
 library(plotly)
 library(lubridate)
-setwd("/root/benedetto/Bayes-M&V")
+setwd("/root/benedetto/Bayesian-Measurement-and-Verification")
 source("preprocessing/functions_updated.R")
 
 a <- commandArgs(trailingOnly = T)
