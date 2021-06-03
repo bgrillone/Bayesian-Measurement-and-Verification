@@ -18,7 +18,7 @@ bdg_weather = pd.read_csv("/root/benedetto/data/bdg/weather.csv")
 
 # Run one building subset at the time
 
-subset_df = bdg_df.loc[:, bdg_df.columns.str.startswith(('Crow', 'timestamp'))]
+subset_df = bdg_df.loc[:, bdg_df.columns.str.startswith(('Panther', 'timestamp'))]
 
 buildings = []
 
@@ -28,7 +28,7 @@ for building in subset_df.loc[:, subset_df.columns != 'timestamp']:
     df = df.dropna()
     buildings.append(df)
 
-pool = multiprocessing.Pool()
+pool = multiprocessing.Pool(8)
 pool.map(multiprocessing_bayesian_comparison, buildings)
 
 
