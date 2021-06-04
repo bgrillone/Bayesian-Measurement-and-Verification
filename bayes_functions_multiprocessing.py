@@ -382,7 +382,6 @@ def bayesian_model_comparison_whole_year (df):
     df.weekday = df.weekday - 1
 
     # Create training and test set (for the ashrae data training is 2016, test is 2017)
-    #df = pd.read_csv("/Users/beegroup/Github/Bayes-M&V/current_df_preprocess.csv")
     train_df = df.loc[df["t"] <= pd.to_datetime("2017-01-01")]
     test_df = df.loc[df["t"] > pd.to_datetime("2017-01-01")]
 
@@ -712,6 +711,8 @@ def multiprocessing_bayesian_comparison(df):
     df.columns = ['t', 'total_electricity', 'outdoor_temp']
     edif = str(building_id)
     df.to_csv("/root/benedetto/results/buildings/" + edif + ".csv", index=False)
+
+    
     subprocess.run(["Rscript", "ashrae_preprocess_server.R", edif, building_id])
 
     df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + edif + "_preprocess.csv")
