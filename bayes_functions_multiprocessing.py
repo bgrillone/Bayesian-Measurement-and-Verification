@@ -8,8 +8,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import KFold
 from math import sqrt
 import subprocess
-# import rpy2.robjects as robjects
-# from rpy2.robjects import pandas2ri
+
 
 def bayesian_model_comparison (df):
     # Preprocess
@@ -370,6 +369,342 @@ def bayesian_model_comparison (df):
     export_df = pd.DataFrame(data=export_data)
     return export_df
 
+def bayesian_model_comparison_whole_year (df):
+    # Preprocess
+    df["log_v"] = log_electricity = np.log(df["total_electricity"]).values
+
+    # Create local variables (assign daypart, cluster and weekday values need to start from 0)
+    # clusters are use profile categories, heat_clusters and cool_clusters indicate days having similar
+    # temperature dependence (likely to modify this in the new version of the preprocessing)
+
+    df.t = pd.to_datetime(pd.Series(df.t))
+    df.s = df.s - 1
+    df.weekday = df.weekday - 1
+
+    # Create training and test set (for the ashrae data training is 2016, test is 2017)
+    #df = pd.read_csv("/Users/beegroup/Github/Bayes-M&V/current_df_preprocess.csv")
+    train_df = df.loc[df["t"] <= pd.to_datetime("2017-01-01")]
+    test_df = df.loc[df["t"] > pd.to_datetime("2017-01-01")]
+
+    # Define Training variables
+    total_electricity_train = train_df.total_electricity.values
+    log_electricity_train = train_df['log_v']
+    clusters_train = df.s
+    unique_clusters = clusters_train.unique()
+    dayparts_train = train_df.daypart
+    weekdays_train = train_df.weekday
+    unique_dayparts = dayparts_train.unique()
+    unique_weekdays = weekdays_train.unique()
+    outdoor_temp_c_train = train_df.outdoor_temp_c
+    outdoor_temp_h_train = train_df.outdoor_temp_h
+    outdoor_temp_lp_c_train = train_df.outdoor_temp_lp_c
+    outdoor_temp_lp_h_train = train_df.outdoor_temp_lp_h
+    daypart_fs_sin_1_train = train_df.daypart_fs_sin_1
+    daypart_fs_sin_2_train = train_df.daypart_fs_sin_2
+    daypart_fs_sin_3_train = train_df.daypart_fs_sin_3
+    daypart_fs_cos_1_train = train_df.daypart_fs_cos_1
+    daypart_fs_cos_2_train = train_df.daypart_fs_cos_2
+    daypart_fs_cos_3_train = train_df.daypart_fs_cos_3
+
+    # Define test variables
+    clusters_test = test_df.s
+    dayparts_test = test_df.daypart
+    weekdays_test = test_df.weekday
+    outdoor_temp_c_test = test_df.outdoor_temp_c
+    outdoor_temp_h_test = test_df.outdoor_temp_h
+    outdoor_temp_lp_c_test = test_df.outdoor_temp_lp_c
+    outdoor_temp_lp_h_test = test_df.outdoor_temp_lp_h
+    daypart_fs_sin_1_test = test_df.daypart_fs_sin_1
+    daypart_fs_sin_2_test = test_df.daypart_fs_sin_2
+    daypart_fs_sin_3_test = test_df.daypart_fs_sin_3
+    daypart_fs_cos_1_test = test_df.daypart_fs_cos_1
+    daypart_fs_cos_2_test = test_df.daypart_fs_cos_2
+    daypart_fs_cos_3_test = test_df.daypart_fs_cos_3
+
+    # create coords for pymc3
+    coords = {"obs_id": np.arange(total_electricity_train.size)}
+    coords["profile_cluster"] = unique_clusters
+    coords["daypart"] = unique_dayparts
+    coords["weekday"] = unique_weekdays
+
+    # Partial Pooling
+
+    with pm.Model(coords=coords) as partial_pooling:
+        profile_cluster_idx = pm.Data("profile_cluster_idx", clusters_train, dims="obs_id")
+        daypart = pm.Data("daypart", dayparts_train, dims="obs_id")
+        weekday = pm.Data("weekday", weekdays_train, dims="obs_id")
+
+        fs_sin_1 = pm.Data("fs_sin_1", daypart_fs_sin_1_train, dims="obs_id")
+        fs_sin_2 = pm.Data("fs_sin_2", daypart_fs_sin_2_train, dims="obs_id")
+        fs_sin_3 = pm.Data("fs_sin_3", daypart_fs_sin_3_train, dims="obs_id")
+
+        fs_cos_1 = pm.Data("fs_cos_1", daypart_fs_cos_1_train, dims="obs_id")
+        fs_cos_2 = pm.Data("fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
+        fs_cos_3 = pm.Data("fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
+
+        # cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
+        # heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
+        cooling_temp_lp = pm.Data("cooling_temp_lp", outdoor_temp_lp_c_train, dims="obs_id")
+        heating_temp_lp = pm.Data("heating_temp_lp", outdoor_temp_lp_h_train, dims="obs_id")
+
+        # Hyperpriors:
+        bf = pm.Normal("bf", mu=0.0, sigma=1.0)
+        sigma_bf = pm.Exponential("sigma_bf", 1.0)
+        a = pm.Normal("a", mu=0.0, sigma=1.0)
+        sigma_a = pm.Exponential("sigma_a", 1.0)
+
+        # btc = pm.Normal("btc", mu=0.0, sigma=1.0, dims="daypart")
+        # bth = pm.Normal("bth", mu=0.0, sigma=1.0, dims="daypart")
+
+        btclp = pm.Normal("btclp", mu=0.0, sigma=1.0, dims="daypart")
+        bthlp = pm.Normal("bthlp", mu=0.0, sigma=1.0, dims="daypart")
+
+        # Varying intercepts
+        a_cluster = pm.Normal("a_cluster", mu=a, sigma=sigma_a, dims=("daypart", "profile_cluster"))
+
+        # Varying slopes:
+        bs1 = pm.Normal("bs1", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+        bs2 = pm.Normal("bs2", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+        bs3 = pm.Normal("bs3", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+
+        bc1 = pm.Normal("bc1", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+        bc2 = pm.Normal("bc2", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+        bc3 = pm.Normal("bc3", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+
+        # Expected value per county:
+        mu = a_cluster[daypart, profile_cluster_idx] + bs1[profile_cluster_idx] * fs_sin_1 + \
+             bs2[profile_cluster_idx] * fs_sin_2 + bs3[profile_cluster_idx] * fs_sin_3 + \
+             bc1[profile_cluster_idx] * fs_cos_1 + bc2[profile_cluster_idx] * fs_cos_2 + \
+             bc3[profile_cluster_idx] * fs_cos_3 + \
+             btclp[daypart] * cooling_temp_lp + \
+             bthlp[daypart] * heating_temp_lp
+        # btc[daypart] * cooling_temp + bth[daypart] * heating_temp + \
+
+        # Model error:
+        sigma = pm.Exponential("sigma", 1.0)
+
+        # Likelihood
+        y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity_train, dims="obs_id")
+
+    # Fitting
+    with partial_pooling:
+        approx = pm.fit(n=50000,
+                        method='fullrank_advi',
+                        callbacks=[CheckParametersConvergence(tolerance=0.01)])
+        partial_pooling_trace = approx.sample(1000)
+
+    # Sampling from the posterior setting test data to check the predictions on unseen data
+
+    with partial_pooling:
+        pm.set_data({"profile_cluster_idx": clusters_test, "daypart": dayparts_test,  # "weekday":weekdays_test,
+                     "fs_sin_1": daypart_fs_sin_1_test, "fs_sin_2": daypart_fs_sin_2_test, "fs_sin_3": daypart_fs_sin_3_test,
+                     "fs_cos_1": daypart_fs_cos_1_test, "fs_cos_2": daypart_fs_cos_2_test, "fs_cos_3": daypart_fs_cos_3_test,
+                     # "cooling_temp":outdoor_temp_c_test, "heating_temp": outdoor_temp_h_test,
+                     "cooling_temp_lp": outdoor_temp_lp_c_test,
+                     "heating_temp_lp": outdoor_temp_lp_h_test
+                     })
+
+        partial_pool_posterior_hdi = pm.sample_posterior_predictive(partial_pooling_trace, keep_size=True)
+        partial_pool_posterior = pm.sample_posterior_predictive(partial_pooling_trace)
+        partial_pool_prior = pm.sample_prior_predictive(150)
+
+
+    # Calculate predictions and HDI
+
+    partial_pool_predictions = np.exp(partial_pool_posterior['y'].mean(0))
+    hdi_data = az.hdi(partial_pool_posterior_hdi)
+    partial_pool_lower_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='lower'))).flatten()
+    partial_pool_higher_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='higher'))).flatten()
+
+    # Calculate cvrmse and coverage of the HDI
+    partial_pool_mse = mean_squared_error(test_df.total_electricity, partial_pool_predictions)
+    partial_pool_rmse = sqrt(partial_pool_mse)
+    partial_pool_cvrmse = partial_pool_rmse / test_df.total_electricity.mean()
+    partial_pool_coverage = sum((partial_pool_lower_bound <= test_df.total_electricity) & (
+            test_df.total_electricity <= partial_pool_higher_bound)) * 100 / len(test_df)
+    partial_pool_confidence_length = sum(partial_pool_higher_bound) - sum(partial_pool_lower_bound)
+
+    # No Pooling
+
+    with pm.Model(coords=coords) as no_pooling:
+        profile_cluster_idx = pm.Data("profile_cluster_idx", clusters_train, dims="obs_id")
+        daypart = pm.Data("daypart", dayparts_train, dims="obs_id")
+        weekday = pm.Data("weekday", weekdays_train, dims="obs_id")
+
+        fs_sin_1 = pm.Data("fs_sin_1", daypart_fs_sin_1_train, dims="obs_id")
+        fs_sin_2 = pm.Data("fs_sin_2", daypart_fs_sin_2_train, dims="obs_id")
+        fs_sin_3 = pm.Data("fs_sin_3", daypart_fs_sin_3_train, dims="obs_id")
+
+        fs_cos_1 = pm.Data("fs_cos_1", daypart_fs_cos_1_train, dims="obs_id")
+        fs_cos_2 = pm.Data("fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
+        fs_cos_3 = pm.Data("fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
+
+        # cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
+        # heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
+        cooling_temp_lp = pm.Data("cooling_temp_lp", outdoor_temp_lp_c_train, dims="obs_id")
+        heating_temp_lp = pm.Data("heating_temp_lp", outdoor_temp_lp_h_train, dims="obs_id")
+
+        # Priors:
+        a_cluster = pm.Normal("a_cluster", mu=0.0, sigma=1.0, dims=("daypart", "profile_cluster"))
+        btclp = pm.Normal("btclp", mu=0.0, sigma=1.0, dims="daypart")
+        bthlp = pm.Normal("bthlp", mu=0.0, sigma=1.0, dims="daypart")
+
+        bs1 = pm.Normal("bs1", mu=0.0, sigma=1.0, dims="profile_cluster")
+        bs2 = pm.Normal("bs2", mu=0.0, sigma=1.0, dims="profile_cluster")
+        bs3 = pm.Normal("bs3", mu=0.0, sigma=1.0, dims="profile_cluster")
+        bc1 = pm.Normal("bc1", mu=0.0, sigma=1.0, dims="profile_cluster")
+        bc2 = pm.Normal("bc2", mu=0.0, sigma=1.0, dims="profile_cluster")
+        bc3 = pm.Normal("bc3", mu=0.0, sigma=1.0, dims="profile_cluster")
+
+        # Expected value per county:
+        mu = a_cluster[daypart, profile_cluster_idx] + bs1[profile_cluster_idx] * fs_sin_1 + \
+             bs2[profile_cluster_idx] * fs_sin_2 + bs3[profile_cluster_idx] * fs_sin_3 + \
+             bc1[profile_cluster_idx] * fs_cos_1 + bc2[profile_cluster_idx] * fs_cos_2 + \
+             bc3[profile_cluster_idx] * fs_cos_3 + \
+             btclp[daypart] * cooling_temp_lp + \
+             bthlp[daypart] * heating_temp_lp
+        # btc[daypart] * cooling_temp + bth[daypart] * heating_temp + \
+
+        # Model error:
+        sigma = pm.Exponential("sigma", 1.0)
+
+        # Likelihood
+        y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity_train, dims="obs_id")
+
+    # Fitting
+
+    with no_pooling:
+        approx = pm.fit(n=50000,
+                        method='fullrank_advi',
+                        callbacks=[CheckParametersConvergence(tolerance=0.01)])
+        no_pooling_trace = approx.sample(1000)
+
+        # Sampling from the posterior setting test data to check the predictions on unseen data
+
+    with no_pooling:
+        pm.set_data(
+            {"profile_cluster_idx": clusters_test, "daypart": dayparts_test,  # "weekday":weekdays,
+             "fs_sin_1": daypart_fs_sin_1_test, "fs_sin_2": daypart_fs_sin_2_test,
+             "fs_sin_3": daypart_fs_sin_3_test,
+             "fs_cos_1": daypart_fs_cos_1_test, "fs_cos_2": daypart_fs_cos_2_test,
+             "fs_cos_3": daypart_fs_cos_3_test,
+             # "cooling_temp":outdoor_temp_c_test, "heating_temp": outdoor_temp_h_test,
+             "cooling_temp_lp": outdoor_temp_lp_c_test,
+             "heating_temp_lp": outdoor_temp_lp_h_test
+             })
+
+        no_pool_posterior_hdi = pm.sample_posterior_predictive(no_pooling_trace, keep_size=True)
+        no_pool_posterior = pm.sample_posterior_predictive(no_pooling_trace)
+
+        no_pool_prior = pm.sample_prior_predictive(150)
+
+        # Calculate predictions and HDI
+
+    no_pool_predictions = np.exp(no_pool_posterior['y'].mean(0))
+    no_pool_hdi_data = az.hdi(no_pool_posterior_hdi)
+    no_pool_lower_bound = np.array(np.exp(no_pool_hdi_data.to_array().sel(hdi='lower'))).flatten()
+    no_pool_higher_bound = np.array(np.exp(no_pool_hdi_data.to_array().sel(hdi='higher'))).flatten()
+
+    # Calculate cvrmse and coverage of the HDI
+    no_pool_mse = mean_squared_error(test_df.total_electricity, no_pool_predictions)
+    no_pool_rmse = sqrt(no_pool_mse)
+    no_pool_cvrmse = no_pool_rmse / test_df.total_electricity.mean()
+    no_pool_coverage = sum((no_pool_lower_bound <= test_df.total_electricity) & (
+            test_df.total_electricity <= no_pool_higher_bound)) * 100 / len(test_df)
+    no_pool_confidence_length = sum(no_pool_higher_bound) - sum(no_pool_lower_bound)
+
+
+    # Complete pooling
+
+    with pm.Model(coords=coords) as complete_pooling:
+
+        fs_sin_1 = pm.Data("fs_sin_1", daypart_fs_sin_1_train, dims="obs_id")
+        fs_sin_2 = pm.Data("fs_sin_2", daypart_fs_sin_2_train, dims="obs_id")
+        fs_sin_3 = pm.Data("fs_sin_3", daypart_fs_sin_3_train, dims="obs_id")
+
+        fs_cos_1 = pm.Data("fs_cos_1", daypart_fs_cos_1_train, dims="obs_id")
+        fs_cos_2 = pm.Data("fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
+        fs_cos_3 = pm.Data("fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
+
+        # cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
+        # heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
+        cooling_temp_lp = pm.Data("cooling_temp_lp", outdoor_temp_lp_c_train, dims="obs_id")
+        heating_temp_lp = pm.Data("heating_temp_lp", outdoor_temp_lp_h_train, dims="obs_id")
+
+        # Priors:
+        a = pm.Normal("a", mu=0.0, sigma=1.0)
+        btclp = pm.Normal("btclp", mu=0.0, sigma=1.0)
+        bthlp = pm.Normal("bthlp", mu=0.0, sigma=1.0)
+
+        bs1 = pm.Normal("bs1", mu=0.0, sigma=1.0)
+        bs2 = pm.Normal("bs2", mu=0.0, sigma=1.0)
+        bs3 = pm.Normal("bs3", mu=0.0, sigma=1.0)
+        bc1 = pm.Normal("bc1", mu=0.0, sigma=1.0)
+        bc2 = pm.Normal("bc2", mu=0.0, sigma=1.0)
+        bc3 = pm.Normal("bc3", mu=0.0, sigma=1.0)
+
+        # Expected value per county:
+        mu = a + bs1 * fs_sin_1 + bs2 * fs_sin_2 + bs3 * fs_sin_3 + bc1 * fs_cos_1 + bc2 * fs_cos_2 + \
+             bc3 * fs_cos_3 + btclp * cooling_temp_lp + bthlp * heating_temp_lp
+        # btc[daypart] * cooling_temp + bth[daypart] * heating_temp + \
+
+        # Model error:
+        sigma = pm.Exponential("sigma", 1.0)
+
+        # Likelihood
+        y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity_train, dims="obs_id")
+
+    # Fitting
+
+    with complete_pooling:
+        approx = pm.fit(n=50000,
+                        method='fullrank_advi',
+                        callbacks=[CheckParametersConvergence(tolerance=0.01)])
+        complete_pooling_trace = approx.sample(1000)
+
+        # Sampling from the posterior setting test data to check the predictions on unseen data
+
+    with complete_pooling:
+        pm.set_data(
+            {"fs_sin_1": daypart_fs_sin_1_test, "fs_sin_2": daypart_fs_sin_2_test,
+             "fs_sin_3": daypart_fs_sin_3_test,
+             "fs_cos_1": daypart_fs_cos_1_test, "fs_cos_2": daypart_fs_cos_2_test,
+             "fs_cos_3": daypart_fs_cos_3_test,
+             # "cooling_temp":outdoor_temp_c_test, "heating_temp": outdoor_temp_h_test,
+             "cooling_temp_lp": outdoor_temp_lp_c_test,
+             "heating_temp_lp": outdoor_temp_lp_h_test
+             })
+
+        complete_pool_posterior_hdi = pm.sample_posterior_predictive(complete_pooling_trace, keep_size=True)
+        complete_pool_posterior = pm.sample_posterior_predictive(complete_pooling_trace)
+
+        complete_pool_prior = pm.sample_prior_predictive(150)
+
+        # Calculate predictions and HDI
+
+    complete_pool_predictions = np.exp(complete_pool_posterior['y'].mean(0))
+    complete_pool_hdi_data = az.hdi(complete_pool_posterior_hdi)
+    complete_pool_lower_bound = np.array(np.exp(complete_pool_hdi_data.to_array().sel(hdi='lower'))).flatten()
+    complete_pool_higher_bound = np.array(np.exp(complete_pool_hdi_data.to_array().sel(hdi='higher'))).flatten()
+
+    # Calculate cvrmse and coverage of the HDI
+    complete_pool_mse = mean_squared_error(test_df.total_electricity, complete_pool_predictions)
+    complete_pool_rmse = sqrt(complete_pool_mse)
+    complete_pool_cvrmse = complete_pool_rmse / test_df.total_electricity.mean()
+    complete_pool_coverage = sum((complete_pool_lower_bound <= test_df.total_electricity) & (
+            test_df.total_electricity <= complete_pool_higher_bound)) * 100 / len(test_df)
+    complete_pool_confidence_length = sum(complete_pool_higher_bound) - sum(complete_pool_lower_bound)
+
+
+    export_data = {'partial_pooling_cvrmse': [partial_pool_cvrmse], 'no_pooling_cvrmse': [no_pool_cvrmse],
+                   'complete_pooling_cvrmse': [complete_pool_cvrmse], 'partial_pooling_coverage': [partial_pool_coverage],
+                   'no_pooling_coverage': [no_pool_coverage], 'complete_pooling_coverage': [complete_pool_coverage],
+                   'partial_pooling_length':[partial_pool_confidence_length], 'no_pooling_length': [no_pool_confidence_length],
+                   'complete_pooling_length': [complete_pool_confidence_length]}
+
+    export_df = pd.DataFrame(data=export_data)
+    return export_df
+
 
 def multiprocessing_bayesian_comparison(df):
 
@@ -382,7 +717,7 @@ def multiprocessing_bayesian_comparison(df):
     df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + edif + "_preprocess.csv")
     print(df_preprocessed.head())
 
-    model_results = bayesian_model_comparison(df_preprocessed)
+    model_results = bayesian_model_comparison_whole_year(df_preprocessed)
     model_results['id'] = building_id
     # read the csv with the values from previous buildings
     # append to that Excel
@@ -394,40 +729,3 @@ def multiprocessing_bayesian_comparison(df):
 
     final_export.to_csv("/root/benedetto/results/bayes_results.csv", index = False)
     
-
-# def multiprocessing_bayesian_comparison_noR(df):
-# 
-#     building_id = df.columns[1]
-#     df.columns = ['t', 'total_electricity', 'outdoor_temp']
-#     
-#     # source the R file with the needed functions
-#     r = robjects.r
-#     r['source']('functions_updated.R')
-#     clustering_function_r = robjects.globalenv['clustering_load_curves']
-#     
-#     # Clustering
-#     #converting it into r object for passing into r function
-#     df_r = pandas2ri.ri2py(df)
-#     #Invoking the R function and getting the result
-#     df_result_r = clustering_function_r(df_r, 'USA')
-#     
-#     # edif = str(building_id)
-#     # df.to_csv("/root/benedetto/results/buildings/" + edif + ".csv", index=False)
-#     # subprocess.run(["Rscript", "ashrae_preprocess_server.R", edif, building_id])
-#     # 
-#     # df_preprocessed = pd.read_csv("/root/benedetto/results/buildings" + edif + "_preprocess.csv")
-#     print(df_preprocessed.head())
-# 
-#     model_results = bayesian_model_comparison(df_preprocessed)
-#     model_results['id'] = building_id
-#     # read the csv with the values from previous buildings
-#     # append to that Excel
-#     try:
-#         dat = pd.read_csv("/root/benedetto/results/bayes_results.csv")
-#         final_export = dat.append(model_results)
-#     except:
-#         final_export = model_results
-# 
-#     final_export.to_csv("/root/benedetto/results/bayes_results.csv", index = False)
-
-

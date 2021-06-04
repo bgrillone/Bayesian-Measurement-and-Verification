@@ -28,7 +28,7 @@ for building in subset_df.loc[:, subset_df.columns != 'timestamp']:
     df = df.dropna()
     buildings.append(df)
 
-pool = multiprocessing.Pool()
+pool = multiprocessing.Pool(8)
 pool.map(multiprocessing_bayesian_comparison, buildings)
 
 
