@@ -720,17 +720,18 @@ def multiprocessing_bayesian_comparison(df):
         subprocess.run(["Rscript", "ashrae_preprocess_server.R", edif, building_id])
         df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + edif + "_preprocess.csv")
 
-    print(df_preprocessed.head())
-
-    model_results = bayesian_model_comparison_whole_year(df_preprocessed)
-    model_results['id'] = building_id
-    # read the csv with the values from previous buildings
-    # append to that Excel
     try:
-        dat = pd.read_csv("/root/benedetto/results/bayes_results.csv")
-        final_export = dat.append(model_results)
-    except:
-        final_export = model_results
+        model_results = bayesian_model_comparison_whole_year(df_preprocessed)
+        model_results['id'] = building_id
+        # read the csv with the values from previous buildings
+        # append to that Excel
+        try:
+            dat = pd.read_csv("/root/benedetto/results/bayes_results.csv")
+            final_export = dat.append(model_results)
+        except:
+            final_export = model_results
 
-    final_export.to_csv("/root/benedetto/results/bayes_results.csv", index = False)
+        final_export.to_csv("/root/benedetto/results/bayes_results.csv", index = False)
+    except:
+        print('Modeling error for ' + str(edif) + '. Skipping to the next building')
     
