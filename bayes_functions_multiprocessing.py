@@ -388,7 +388,7 @@ def bayesian_model_comparison_whole_year (df):
     # Define Training variables
     total_electricity_train = train_df.total_electricity.values
     log_electricity_train = train_df['log_v']
-    clusters_train = df.s
+    clusters_train = train_df.s
     unique_clusters = clusters_train.unique()
     dayparts_train = train_df.daypart
     weekdays_train = train_df.weekday
@@ -712,10 +712,14 @@ def multiprocessing_bayesian_comparison(df):
     edif = str(building_id)
     df.to_csv("/root/benedetto/results/buildings/" + edif + ".csv", index=False)
 
-    
-    subprocess.run(["Rscript", "ashrae_preprocess_server.R", edif, building_id])
+    try:
+        df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + edif + "_preprocess.csv")
+        print(str(edif) + ' preprocessed data was retrieved succesfully')
+    except:
+        print('Running preprocessing for ' + str(edif))
+        subprocess.run(["Rscript", "ashrae_preprocess_server.R", edif, building_id])
+        df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + edif + "_preprocess.csv")
 
-    df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + edif + "_preprocess.csv")
     print(df_preprocessed.head())
 
     model_results = bayesian_model_comparison_whole_year(df_preprocessed)
