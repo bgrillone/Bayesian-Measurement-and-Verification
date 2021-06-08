@@ -721,17 +721,31 @@ def multiprocessing_bayesian_comparison(df):
         df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + edif + "_preprocess.csv")
 
     try:
-        model_results = bayesian_model_comparison_whole_year(df_preprocessed)
-        model_results['id'] = building_id
-        # read the csv with the values from previous buildings
-        # append to that Excel
-        try:
-            dat = pd.read_csv("/root/benedetto/results/bayes_results.csv")
-            final_export = dat.append(model_results)
-        except:
-            final_export = model_results
-
-        final_export.to_csv("/root/benedetto/results/bayes_results.csv", index = False)
+        dat = pd.read_csv("/root/benedetto/results/bayes_results.csv")
+        results_exist = True
     except:
-        print('Modeling error for ' + str(edif) + '. Skipping to the next building')
+        results_exist = False
+
+    if results_exist == True & (building_id in dat.values):
+        print('Results for ' + building_id + ' are already calculated. Skipping to next building')
+
+    elif results_exist == True & (building_id not in dat.values):
+        try:
+            model_results = bayesian_model_comparison_whole_year(df_preprocessed)
+            model_results['id'] = building_id
+            final_export = dat.append(model_results)
+            final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
+        except:
+            print('Modeling error for ' + str(edif) + '. Skipping to the next building')
+
+    else:
+        try:
+            model_results = bayesian_model_comparison_whole_year(df_preprocessed)
+            model_results['id'] = building_id
+            final_export = model_results
+            final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
+        except:
+            print('Modeling error for ' + str(edif) + '. Skipping to the next building')
+
+
     
