@@ -718,7 +718,10 @@ def multiprocessing_bayesian_comparison(df):
     except:
         print('Running preprocessing for ' + str(edif))
         subprocess.run(["Rscript", "ashrae_preprocess_server.R", edif, building_id])
-        df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + edif + "_preprocess.csv")
+        try:
+            df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + edif + "_preprocess.csv")
+        except:
+            print("Preprocessing failed for " + str(edif) + '. Skipping to next building.')
 
     try:
         dat = pd.read_csv("/root/benedetto/results/bayes_results.csv")
