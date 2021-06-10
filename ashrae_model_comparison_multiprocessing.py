@@ -1,16 +1,6 @@
-import arviz  as az
-from bokeh.plotting import figure, output_file, show, save
-import numpy as np
-import pandas as pd
-import pymc3 as pm
-from pymc3.variational.callbacks import CheckParametersConvergence
-from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import KFold
-from math import sqrt
 from bayes_functions_multiprocessing import *
-import subprocess
-import openpyxl
 import multiprocessing
+
 # Import ASHRAE dataset
 
 bdg_df = pd.read_csv("/root/benedetto/data/bdg/electricity_cleaned.csv")
@@ -18,7 +8,8 @@ bdg_weather = pd.read_csv("/root/benedetto/data/bdg/weather.csv")
 
 # Run one building subset at the time
 
-subset_df = bdg_df.loc[:, bdg_df.columns.str.startswith(('Shrew', 'Swan', 'Wolf', 'Eagle', 'Cockatoo', 'Mouse', 'Hog', 'timestamp'))]
+subset_df = bdg_df
+#subset_df = bdg_df.loc[:, bdg_df.columns.str.startswith(('Shrew', 'Swan', 'Wolf', 'Eagle', 'Cockatoo', 'Mouse', 'Hog', 'timestamp'))]
 
 buildings = []
 
@@ -29,6 +20,7 @@ for building in subset_df.loc[:, subset_df.columns != 'timestamp']:
     buildings.append(df)
 
 print("Start multithreading pool")
+
 with multiprocessing.Pool(8) as pool:
     print("Launch calculations")
     tasks = [pool.apply_async(multiprocessing_bayesian_comparison,(x,)) for x in buildings]
