@@ -28,10 +28,11 @@ for building in subset_df.loc[:, subset_df.columns != 'timestamp']:
     df = df.dropna()
     buildings.append(df)
 
-pool = multiprocessing.pool.ThreadPool(8)
-[pool.apply_async(multiprocessing_bayesian_comparison,args=(x)) for x in buildings]
-
-
-
+print("Start multithreading pool")
+with multiprocessing.Pool(8) as pool:
+    print("Launch calculations")
+    tasks = [pool.apply_async(multiprocessing_bayesian_comparison,(x,)) for x in buildings]
+    [t.get() for t in tasks]
+    print("End")
 
 

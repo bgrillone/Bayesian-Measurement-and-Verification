@@ -844,7 +844,7 @@ characterizer <- function(df_ini, value_column="value", temperature_column = "te
     mutation = gabin_raMutation,
     crossover = partial(bee_uCrossover,nclasses_per_feature = mapply(function(i){i[['n']]},features)),
     optim = F,
-    maxiter=10, popSize = 28*8,parallel= T,pmutation = 0.05) #monitor = monitor)
+    maxiter=10, popSize = 28*8,parallel= F,pmutation = 0.05) #monitor = monitor)
   params <- decodeValueFromBin(GA@solution[1,], 
                                min_per_feature = mapply(function(i){i[['min']]},features),##DATA TO RUN
                                max_per_feature = mapply(function(i){i[['max']]},features),##DATA TO RUN
