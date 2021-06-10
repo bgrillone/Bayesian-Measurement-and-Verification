@@ -1,5 +1,4 @@
 import arviz  as az
-from bokeh.plotting import figure, output_file, show, save
 import numpy as np
 import pandas as pd
 import pymc3 as pm
@@ -8,6 +7,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import KFold
 from math import sqrt
 import subprocess
+import os
 
 
 def bayesian_model_comparison (df):
@@ -710,8 +710,15 @@ def multiprocessing_bayesian_comparison(df):
     building_id = df.columns[1]
     df.columns = ['t', 'total_electricity', 'outdoor_temp']
     edif = str(building_id)
-    df.to_csv("/root/benedetto/results/buildings/" + edif + ".csv", index=False)
 
+    # Print consumption and temperature df if it doesn't exist already
+
+    if os.path.isfile("/root/benedetto/results/buildings/" + edif + ".csv"):
+        print(edif + ' data was retreived successfully')
+    else:
+        df.to_csv("/root/benedetto/results/buildings/" + edif + ".csv", index=False)
+
+    # Try to read preprocessed file, otherwise run preprocessing
     try:
         df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + edif + "_preprocess.csv")
         print(str(edif) + ' preprocessed data was retrieved succesfully')
@@ -729,6 +736,7 @@ def multiprocessing_bayesian_comparison(df):
     except:
         results_exist = False
 
+    # If model results already exist for the selected building, skip to next
     if results_exist == True & (building_id in dat.values):
         print('Results for ' + building_id + ' are already calculated. Skipping to next building')
 
