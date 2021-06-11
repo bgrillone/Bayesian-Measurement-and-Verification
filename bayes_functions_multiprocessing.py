@@ -794,18 +794,17 @@ def multiprocessing_bayesian_comparison(df):
         results_exist = False
 
     # If model results already exist for the selected building, skip to next
-    if results_exist == True & (building_id in dat.values):
-        print('Results for ' + building_id + ' are already calculated. Skipping to next building')
-
-    elif results_exist == True & (building_id not in dat.values):
-        try:
-            model_results = bayesian_model_comparison_whole_year(df_preprocessed)
-            model_results['id'] = building_id
-            final_export = dat.append(model_results)
-            final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
-        except:
-            print('Modeling error for ' + str(edif) + '. Skipping to the next building')
-
+    if results_exist == True:
+        if building_id in dat.values:
+            print('Results for ' + building_id + ' are already calculated. Skipping to next building')
+        else:
+            try:
+                model_results = bayesian_model_comparison_whole_year(df_preprocessed)
+                model_results['id'] = building_id
+                final_export = dat.append(model_results)
+                final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
+            except:
+                print('Modeling error for ' + str(edif) + '. Skipping to the next building')
     else:
         try:
             model_results = bayesian_model_comparison_whole_year(df_preprocessed)
