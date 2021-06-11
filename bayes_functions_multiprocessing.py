@@ -370,6 +370,7 @@ def bayesian_model_comparison (df):
     return export_df
 
 def bayesian_model_comparison_whole_year (df):
+    #df = pd.read_csv("/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Panther_lodging_Janice_preprocess.csv")
     # Preprocess
     df["log_v"] = log_electricity = np.log(df["total_electricity"]).values
 
@@ -441,8 +442,8 @@ def bayesian_model_comparison_whole_year (df):
         fs_cos_2 = pm.Data("fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
         fs_cos_3 = pm.Data("fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
 
-        # cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
-        # heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
+        cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
+        heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
         cooling_temp_lp = pm.Data("cooling_temp_lp", outdoor_temp_lp_c_train, dims="obs_id")
         heating_temp_lp = pm.Data("heating_temp_lp", outdoor_temp_lp_h_train, dims="obs_id")
 
@@ -452,14 +453,14 @@ def bayesian_model_comparison_whole_year (df):
         a = pm.Normal("a", mu=0.0, sigma=1.0)
         sigma_a = pm.Exponential("sigma_a", 1.0)
 
-        # btc = pm.Normal("btc", mu=0.0, sigma=1.0, dims="daypart")
-        # bth = pm.Normal("bth", mu=0.0, sigma=1.0, dims="daypart")
+        btc = pm.Normal("btc", mu=0.0, sigma=1.0, dims="daypart")
+        bth = pm.Normal("bth", mu=0.0, sigma=1.0, dims="daypart")
 
         btclp = pm.Normal("btclp", mu=0.0, sigma=1.0, dims="daypart")
         bthlp = pm.Normal("bthlp", mu=0.0, sigma=1.0, dims="daypart")
 
         # Varying intercepts
-        a_cluster = pm.Normal("a_cluster", mu=a, sigma=sigma_a, dims=("daypart", "profile_cluster"))
+        a_cluster = pm.Normal("a_cluster", mu=a, sigma=sigma_a, dims=("profile_cluster"))
 
         # Varying slopes:
         bs1 = pm.Normal("bs1", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
@@ -471,13 +472,13 @@ def bayesian_model_comparison_whole_year (df):
         bc3 = pm.Normal("bc3", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
 
         # Expected value per county:
-        mu = a_cluster[daypart, profile_cluster_idx] + bs1[profile_cluster_idx] * fs_sin_1 + \
+        mu = a_cluster[profile_cluster_idx] + bs1[profile_cluster_idx] * fs_sin_1 + \
              bs2[profile_cluster_idx] * fs_sin_2 + bs3[profile_cluster_idx] * fs_sin_3 + \
              bc1[profile_cluster_idx] * fs_cos_1 + bc2[profile_cluster_idx] * fs_cos_2 + \
              bc3[profile_cluster_idx] * fs_cos_3 + \
              btclp[daypart] * cooling_temp_lp + \
-             bthlp[daypart] * heating_temp_lp
-        # btc[daypart] * cooling_temp + bth[daypart] * heating_temp + \
+             bthlp[daypart] * heating_temp_lp + btc[daypart] * cooling_temp + \
+             bth[daypart] * heating_temp
 
         # Model error:
         sigma = pm.Exponential("sigma", 1.0)
@@ -495,10 +496,17 @@ def bayesian_model_comparison_whole_year (df):
     # Sampling from the posterior setting test data to check the predictions on unseen data
 
     with partial_pooling:
-        pm.set_data({"profile_cluster_idx": clusters_test, "daypart": dayparts_test,  # "weekday":weekdays_test,
-                     "fs_sin_1": daypart_fs_sin_1_test, "fs_sin_2": daypart_fs_sin_2_test, "fs_sin_3": daypart_fs_sin_3_test,
-                     "fs_cos_1": daypart_fs_cos_1_test, "fs_cos_2": daypart_fs_cos_2_test, "fs_cos_3": daypart_fs_cos_3_test,
-                     # "cooling_temp":outdoor_temp_c_test, "heating_temp": outdoor_temp_h_test,
+        pm.set_data({"profile_cluster_idx": clusters_test,
+                     "daypart": dayparts_test,
+                     # "weekday":weekdays_test,
+                     "fs_sin_1": daypart_fs_sin_1_test,
+                     "fs_sin_2": daypart_fs_sin_2_test,
+                     "fs_sin_3": daypart_fs_sin_3_test,
+                     "fs_cos_1": daypart_fs_cos_1_test,
+                     "fs_cos_2": daypart_fs_cos_2_test,
+                     "fs_cos_3": daypart_fs_cos_3_test,
+                     "cooling_temp":outdoor_temp_c_test,
+                     "heating_temp": outdoor_temp_h_test,
                      "cooling_temp_lp": outdoor_temp_lp_c_test,
                      "heating_temp_lp": outdoor_temp_lp_h_test
                      })
@@ -515,6 +523,15 @@ def bayesian_model_comparison_whole_year (df):
     partial_pool_lower_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='lower'))).flatten()
     partial_pool_higher_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='higher'))).flatten()
 
+    # Calculate adjusted coverage
+    partial_pool_gamma =  np.where(test_df.total_electricity > partial_pool_higher_bound,
+                      1 + (np.log(test_df.total_electricity - partial_pool_higher_bound)/np.log(test_df.total_electricity)),
+                      np.where(test_df.total_electricity < partial_pool_lower_bound,
+                               1 + (np.log(partial_pool_lower_bound - test_df.total_electricity)/np.log(test_df.total_electricity)),
+                               1))
+
+    partial_pool_adjusted_coverage = 1/len(test_df) * np.sum(partial_pool_gamma * np.log(partial_pool_higher_bound) /np.log(partial_pool_lower_bound))
+
     # Calculate cvrmse and coverage of the HDI
     partial_pool_mse = mean_squared_error(test_df.total_electricity, partial_pool_predictions)
     partial_pool_rmse = sqrt(partial_pool_mse)
@@ -522,6 +539,9 @@ def bayesian_model_comparison_whole_year (df):
     partial_pool_coverage = sum((partial_pool_lower_bound <= test_df.total_electricity) & (
             test_df.total_electricity <= partial_pool_higher_bound)) * 100 / len(test_df)
     partial_pool_confidence_length = sum(partial_pool_higher_bound) - sum(partial_pool_lower_bound)
+
+    # Calculate NMBE
+    partial_pool_nmbe = np.sum(test_df.total_electricity - partial_pool_predictions) * 100 / len(test_df) / test_df.total_electricity.mean()
 
     # No Pooling
 
@@ -538,13 +558,13 @@ def bayesian_model_comparison_whole_year (df):
         fs_cos_2 = pm.Data("fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
         fs_cos_3 = pm.Data("fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
 
-        # cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
-        # heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
+        cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
+        heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
         cooling_temp_lp = pm.Data("cooling_temp_lp", outdoor_temp_lp_c_train, dims="obs_id")
         heating_temp_lp = pm.Data("heating_temp_lp", outdoor_temp_lp_h_train, dims="obs_id")
 
         # Priors:
-        a_cluster = pm.Normal("a_cluster", mu=0.0, sigma=1.0, dims=("daypart", "profile_cluster"))
+        a_cluster = pm.Normal("a_cluster", mu=0.0, sigma=1.0, dims=("profile_cluster"))
         btclp = pm.Normal("btclp", mu=0.0, sigma=1.0, dims="daypart")
         bthlp = pm.Normal("bthlp", mu=0.0, sigma=1.0, dims="daypart")
 
@@ -556,13 +576,14 @@ def bayesian_model_comparison_whole_year (df):
         bc3 = pm.Normal("bc3", mu=0.0, sigma=1.0, dims="profile_cluster")
 
         # Expected value per county:
-        mu = a_cluster[daypart, profile_cluster_idx] + bs1[profile_cluster_idx] * fs_sin_1 + \
+        mu = a_cluster[profile_cluster_idx] + bs1[profile_cluster_idx] * fs_sin_1 + \
              bs2[profile_cluster_idx] * fs_sin_2 + bs3[profile_cluster_idx] * fs_sin_3 + \
              bc1[profile_cluster_idx] * fs_cos_1 + bc2[profile_cluster_idx] * fs_cos_2 + \
              bc3[profile_cluster_idx] * fs_cos_3 + \
              btclp[daypart] * cooling_temp_lp + \
-             bthlp[daypart] * heating_temp_lp
-        # btc[daypart] * cooling_temp + bth[daypart] * heating_temp + \
+             bthlp[daypart] * heating_temp_lp + \
+             btc[daypart] * cooling_temp + \
+             bth[daypart] * heating_temp
 
         # Model error:
         sigma = pm.Exponential("sigma", 1.0)
@@ -582,12 +603,17 @@ def bayesian_model_comparison_whole_year (df):
 
     with no_pooling:
         pm.set_data(
-            {"profile_cluster_idx": clusters_test, "daypart": dayparts_test,  # "weekday":weekdays,
-             "fs_sin_1": daypart_fs_sin_1_test, "fs_sin_2": daypart_fs_sin_2_test,
+            {"profile_cluster_idx": clusters_test,
+             "daypart": dayparts_test,
+             # "weekday":weekdays,
+             "fs_sin_1": daypart_fs_sin_1_test,
+             "fs_sin_2": daypart_fs_sin_2_test,
              "fs_sin_3": daypart_fs_sin_3_test,
-             "fs_cos_1": daypart_fs_cos_1_test, "fs_cos_2": daypart_fs_cos_2_test,
+             "fs_cos_1": daypart_fs_cos_1_test,
+             "fs_cos_2": daypart_fs_cos_2_test,
              "fs_cos_3": daypart_fs_cos_3_test,
-             # "cooling_temp":outdoor_temp_c_test, "heating_temp": outdoor_temp_h_test,
+             "cooling_temp":outdoor_temp_c_test,
+             "heating_temp": outdoor_temp_h_test,
              "cooling_temp_lp": outdoor_temp_lp_c_test,
              "heating_temp_lp": outdoor_temp_lp_h_test
              })
@@ -604,6 +630,17 @@ def bayesian_model_comparison_whole_year (df):
     no_pool_lower_bound = np.array(np.exp(no_pool_hdi_data.to_array().sel(hdi='lower'))).flatten()
     no_pool_higher_bound = np.array(np.exp(no_pool_hdi_data.to_array().sel(hdi='higher'))).flatten()
 
+    # Calculate wideness and completeness
+
+    no_pool_gamma =  np.where(test_df.total_electricity > no_pool_higher_bound,
+                      1 + (np.log(test_df.total_electricity - no_pool_higher_bound)/np.log(test_df.total_electricity)),
+                      np.where(test_df.total_electricity < no_pool_lower_bound,
+                               1 + (np.log(no_pool_lower_bound - test_df.total_electricity)/np.log(test_df.total_electricity)),
+                               1))
+
+    no_pool_adjusted_coverage = 1/len(test_df) * np.sum(no_pool_gamma * np.log(no_pool_higher_bound) /np.log(no_pool_lower_bound))
+
+
     # Calculate cvrmse and coverage of the HDI
     no_pool_mse = mean_squared_error(test_df.total_electricity, no_pool_predictions)
     no_pool_rmse = sqrt(no_pool_mse)
@@ -612,6 +649,9 @@ def bayesian_model_comparison_whole_year (df):
             test_df.total_electricity <= no_pool_higher_bound)) * 100 / len(test_df)
     no_pool_confidence_length = sum(no_pool_higher_bound) - sum(no_pool_lower_bound)
 
+    # Calculate NMBE
+    no_pool_nmbe = np.sum(test_df.total_electricity - no_pool_predictions) * 100 / len(
+        test_df) / test_df.total_electricity.mean()
 
     # Complete pooling
 
@@ -625,8 +665,8 @@ def bayesian_model_comparison_whole_year (df):
         fs_cos_2 = pm.Data("fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
         fs_cos_3 = pm.Data("fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
 
-        # cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
-        # heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
+        cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
+        heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
         cooling_temp_lp = pm.Data("cooling_temp_lp", outdoor_temp_lp_c_train, dims="obs_id")
         heating_temp_lp = pm.Data("heating_temp_lp", outdoor_temp_lp_h_train, dims="obs_id")
 
@@ -643,9 +683,10 @@ def bayesian_model_comparison_whole_year (df):
         bc3 = pm.Normal("bc3", mu=0.0, sigma=1.0)
 
         # Expected value per county:
-        mu = a + bs1 * fs_sin_1 + bs2 * fs_sin_2 + bs3 * fs_sin_3 + bc1 * fs_cos_1 + bc2 * fs_cos_2 + \
-             bc3 * fs_cos_3 + btclp * cooling_temp_lp + bthlp * heating_temp_lp
-        # btc[daypart] * cooling_temp + bth[daypart] * heating_temp + \
+        mu = a + bs1 * fs_sin_1 + bs2 * fs_sin_2 + bs3 * fs_sin_3 + \
+             bc1 * fs_cos_1 + bc2 * fs_cos_2 + \
+             bc3 * fs_cos_3 + btclp * cooling_temp_lp + bthlp * heating_temp_lp + \
+             btc * cooling_temp + bth * heating_temp
 
         # Model error:
         sigma = pm.Exponential("sigma", 1.0)
@@ -665,11 +706,14 @@ def bayesian_model_comparison_whole_year (df):
 
     with complete_pooling:
         pm.set_data(
-            {"fs_sin_1": daypart_fs_sin_1_test, "fs_sin_2": daypart_fs_sin_2_test,
+            {"fs_sin_1": daypart_fs_sin_1_test,
+             "fs_sin_2": daypart_fs_sin_2_test,
              "fs_sin_3": daypart_fs_sin_3_test,
-             "fs_cos_1": daypart_fs_cos_1_test, "fs_cos_2": daypart_fs_cos_2_test,
+             "fs_cos_1": daypart_fs_cos_1_test,
+             "fs_cos_2": daypart_fs_cos_2_test,
              "fs_cos_3": daypart_fs_cos_3_test,
-             # "cooling_temp":outdoor_temp_c_test, "heating_temp": outdoor_temp_h_test,
+             "cooling_temp":outdoor_temp_c_test,
+             "heating_temp": outdoor_temp_h_test,
              "cooling_temp_lp": outdoor_temp_lp_c_test,
              "heating_temp_lp": outdoor_temp_lp_h_test
              })
@@ -686,6 +730,14 @@ def bayesian_model_comparison_whole_year (df):
     complete_pool_lower_bound = np.array(np.exp(complete_pool_hdi_data.to_array().sel(hdi='lower'))).flatten()
     complete_pool_higher_bound = np.array(np.exp(complete_pool_hdi_data.to_array().sel(hdi='higher'))).flatten()
 
+    complete_pool_gamma =  np.where(test_df.total_electricity > complete_pool_higher_bound,
+                      1 + (np.log(test_df.total_electricity - complete_pool_higher_bound)/np.log(test_df.total_electricity)),
+                      np.where(test_df.total_electricity < complete_pool_lower_bound,
+                               1 + (np.log(complete_pool_lower_bound - test_df.total_electricity)/np.log(test_df.total_electricity)),
+                               1))
+
+    complete_pool_adjusted_coverage = 1/len(test_df) * np.sum(complete_pool_gamma * np.log(complete_pool_higher_bound) /np.log(complete_pool_lower_bound))
+
     # Calculate cvrmse and coverage of the HDI
     complete_pool_mse = mean_squared_error(test_df.total_electricity, complete_pool_predictions)
     complete_pool_rmse = sqrt(complete_pool_mse)
@@ -694,12 +746,17 @@ def bayesian_model_comparison_whole_year (df):
             test_df.total_electricity <= complete_pool_higher_bound)) * 100 / len(test_df)
     complete_pool_confidence_length = sum(complete_pool_higher_bound) - sum(complete_pool_lower_bound)
 
+    complete_pool_nmbe = np.sum(test_df.total_electricity - complete_pool_predictions) * 100 / len(
+        test_df) / test_df.total_electricity.mean()
+
 
     export_data = {'partial_pooling_cvrmse': [partial_pool_cvrmse], 'no_pooling_cvrmse': [no_pool_cvrmse],
                    'complete_pooling_cvrmse': [complete_pool_cvrmse], 'partial_pooling_coverage': [partial_pool_coverage],
                    'no_pooling_coverage': [no_pool_coverage], 'complete_pooling_coverage': [complete_pool_coverage],
                    'partial_pooling_length':[partial_pool_confidence_length], 'no_pooling_length': [no_pool_confidence_length],
-                   'complete_pooling_length': [complete_pool_confidence_length]}
+                   'complete_pooling_length': [complete_pool_confidence_length], 'partial_pooling_adj_coverage': [partial_pool_adjusted_coverage],
+                   'no_pooling_adj_coverage':[no_pool_adjusted_coverage], 'complete_pooling_adj_coverage':[complete_pool_adjusted_coverage],
+                   'partial_pooling_nmbe':[partial_pool_nmbe], 'no_pooling_nmbe':[no_pool_nmbe], 'complete_pooling_nmbe':[complete_pool_nmbe]}
 
     export_df = pd.DataFrame(data=export_data)
     return export_df
