@@ -674,6 +674,8 @@ def bayesian_model_comparison_whole_year (df):
         a = pm.Normal("a", mu=0.0, sigma=1.0)
         btclp = pm.Normal("btclp", mu=0.0, sigma=1.0)
         bthlp = pm.Normal("bthlp", mu=0.0, sigma=1.0)
+        btc = pm.Normal("btc", mu=0.0, sigma=1.0)
+        bth = pm.Normal("bth", mu=0.0, sigma=1.0)
 
         bs1 = pm.Normal("bs1", mu=0.0, sigma=1.0)
         bs2 = pm.Normal("bs2", mu=0.0, sigma=1.0)
@@ -749,6 +751,7 @@ def bayesian_model_comparison_whole_year (df):
     complete_pool_nmbe = np.sum(test_df.total_electricity - complete_pool_predictions) * 100 / len(
         test_df) / test_df.total_electricity.mean()
 
+    print('ready to export')
 
     export_data = {'partial_pooling_cvrmse': [partial_pool_cvrmse], 'no_pooling_cvrmse': [no_pool_cvrmse],
                    'complete_pooling_cvrmse': [complete_pool_cvrmse], 'partial_pooling_coverage': [partial_pool_coverage],
