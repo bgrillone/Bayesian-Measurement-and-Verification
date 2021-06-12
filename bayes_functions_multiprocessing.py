@@ -369,7 +369,7 @@ def bayesian_model_comparison (df):
     export_df = pd.DataFrame(data=export_data)
     return export_df
 
-def bayesian_model_comparison_whole_year (df):
+def bayesian_model_comparison_whole_year (df, building_id):
     #df = pd.read_csv("/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Panther_lodging_Janice_preprocess.csv")
     # Preprocess
     df["log_v"] = log_electricity = np.log(df["total_electricity"]).values
@@ -543,6 +543,14 @@ def bayesian_model_comparison_whole_year (df):
     # Calculate NMBE
     partial_pool_nmbe = np.sum(test_df.total_electricity - partial_pool_predictions) * 100 / len(test_df) / test_df.total_electricity.mean()
 
+    # Print df
+    pp_data = {'t': test_df['t'],
+               'prediction': partial_pool_predictions,
+               'lower_bound': partial_pool_lower_bound,
+               'higher_bound': partial_pool_higher_bound}
+
+    pp_results = pd.DataFrame(data=pp_data)
+    pp_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_pp.csv", index=False)
     # No Pooling
 
     with pm.Model(coords=coords) as no_pooling:
@@ -653,6 +661,15 @@ def bayesian_model_comparison_whole_year (df):
     no_pool_nmbe = np.sum(test_df.total_electricity - no_pool_predictions) * 100 / len(
         test_df) / test_df.total_electricity.mean()
 
+    # Print predictions df
+    np_data = {'t': test_df['t'],
+               'prediction': no_pool_predictions,
+               'lower_bound': no_pool_lower_bound,
+               'higher_bound': no_pool_higher_bound}
+
+    np_results = pd.DataFrame(data=np_data)
+    np_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_np.csv", index=False)
+
     # Complete pooling
 
     with pm.Model(coords=coords) as complete_pooling:
@@ -751,15 +768,31 @@ def bayesian_model_comparison_whole_year (df):
     complete_pool_nmbe = np.sum(test_df.total_electricity - complete_pool_predictions) * 100 / len(
         test_df) / test_df.total_electricity.mean()
 
-    print('ready to export')
+    # Print predictions df
+    cp_data = {'t': test_df['t'],
+               'prediction': complete_pool_predictions,
+               'lower_bound': complete_pool_lower_bound,
+               'higher_bound': complete_pool_higher_bound}
 
-    export_data = {'partial_pooling_cvrmse': [partial_pool_cvrmse], 'no_pooling_cvrmse': [no_pool_cvrmse],
-                   'complete_pooling_cvrmse': [complete_pool_cvrmse], 'partial_pooling_coverage': [partial_pool_coverage],
-                   'no_pooling_coverage': [no_pool_coverage], 'complete_pooling_coverage': [complete_pool_coverage],
-                   'partial_pooling_length':[partial_pool_confidence_length], 'no_pooling_length': [no_pool_confidence_length],
-                   'complete_pooling_length': [complete_pool_confidence_length], 'partial_pooling_adj_coverage': [partial_pool_adjusted_coverage],
-                   'no_pooling_adj_coverage':[no_pool_adjusted_coverage], 'complete_pooling_adj_coverage':[complete_pool_adjusted_coverage],
-                   'partial_pooling_nmbe':[partial_pool_nmbe], 'no_pooling_nmbe':[no_pool_nmbe], 'complete_pooling_nmbe':[complete_pool_nmbe]}
+    cp_results = pd.DataFrame(data=cp_data)
+    cp_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_cp.csv", index=False)
+
+    export_data = {'partial_pooling_cvrmse': [partial_pool_cvrmse],
+                   'no_pooling_cvrmse': [no_pool_cvrmse],
+                   'complete_pooling_cvrmse': [complete_pool_cvrmse],
+                   'partial_pooling_coverage': [partial_pool_coverage],
+                   'no_pooling_coverage': [no_pool_coverage],
+                   'complete_pooling_coverage': [complete_pool_coverage],
+                   'partial_pooling_length':[partial_pool_confidence_length],
+                   'no_pooling_length': [no_pool_confidence_length],
+                   'complete_pooling_length': [complete_pool_confidence_length],
+                   'partial_pooling_adj_coverage': [partial_pool_adjusted_coverage],
+                   'no_pooling_adj_coverage':[no_pool_adjusted_coverage],
+                   'complete_pooling_adj_coverage':[complete_pool_adjusted_coverage],
+                   'partial_pooling_nmbe':[partial_pool_nmbe],
+                   'no_pooling_nmbe':[no_pool_nmbe],
+                   'complete_pooling_nmbe':[complete_pool_nmbe],
+                   'id':building_id}
 
     export_df = pd.DataFrame(data=export_data)
     return export_df
@@ -769,26 +802,25 @@ def multiprocessing_bayesian_comparison(df):
 
     building_id = df.columns[1]
     df.columns = ['t', 'total_electricity', 'outdoor_temp']
-    edif = str(building_id)
 
     # Print consumption and temperature df if it doesn't exist already
 
-    if os.path.isfile("/root/benedetto/results/buildings/" + edif + ".csv"):
-        print(edif + ' data was retreived successfully')
+    if os.path.isfile("/root/benedetto/results/buildings/" + building_id + ".csv"):
+        print(building_id + ' data was retreived successfully')
     else:
-        df.to_csv("/root/benedetto/results/buildings/" + edif + ".csv", index=False)
+        df.to_csv("/root/benedetto/results/buildings/" + building_id + ".csv", index=False)
 
     # Try to read preprocessed file, otherwise run preprocessing
     try:
-        df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + edif + "_preprocess.csv")
-        print(str(edif) + ' preprocessed data was retrieved succesfully')
+        df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + building_id + "_preprocess.csv")
+        print(building_id + ' preprocessed data was retrieved succesfully')
     except:
-        print('Running preprocessing for ' + str(edif))
-        subprocess.run(["Rscript", "ashrae_preprocess_server.R", edif, building_id])
+        print('Running preprocessing for ' + building_id)
+        subprocess.run(["Rscript", "ashrae_preprocess_server.R", building_id, building_id])
         try:
-            df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + edif + "_preprocess.csv")
+            df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + building_id + "_preprocess.csv")
         except:
-            print("Preprocessing failed for " + str(edif) + '. Skipping to next building.')
+            print("Preprocessing failed for " + building_id + '. Skipping to next building.')
 
     try:
         dat = pd.read_csv("/root/benedetto/results/bayes_results.csv")
@@ -802,20 +834,18 @@ def multiprocessing_bayesian_comparison(df):
             print('Results for ' + building_id + ' are already calculated. Skipping to next building')
         else:
             try:
-                model_results = bayesian_model_comparison_whole_year(df_preprocessed)
-                model_results['id'] = building_id
+                model_results = bayesian_model_comparison_whole_year(df_preprocessed, building_id)
                 final_export = dat.append(model_results)
                 final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
             except:
-                print('Modeling error for ' + str(edif) + '. Skipping to the next building')
+                print('Modeling error for ' + building_id + '. Skipping to the next building')
     else:
         try:
-            model_results = bayesian_model_comparison_whole_year(df_preprocessed)
-            model_results['id'] = building_id
+            model_results = bayesian_model_comparison_whole_year(df_preprocessed, building_id)
             final_export = model_results
             final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
         except:
-            print('Modeling error for ' + str(edif) + '. Skipping to the next building')
+            print('Modeling error for ' + building_id + '. Skipping to the next building')
 
 
     
