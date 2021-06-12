@@ -575,6 +575,8 @@ def bayesian_model_comparison_whole_year (df, building_id):
         a_cluster = pm.Normal("a_cluster", mu=0.0, sigma=1.0, dims=("profile_cluster"))
         btclp = pm.Normal("btclp", mu=0.0, sigma=1.0, dims="daypart")
         bthlp = pm.Normal("bthlp", mu=0.0, sigma=1.0, dims="daypart")
+        btc = pm.Normal("btc", mu=0.0, sigma=1.0, dims="daypart")
+        bth = pm.Normal("bth", mu=0.0, sigma=1.0, dims="daypart")
 
         bs1 = pm.Normal("bs1", mu=0.0, sigma=1.0, dims="profile_cluster")
         bs2 = pm.Normal("bs2", mu=0.0, sigma=1.0, dims="profile_cluster")
