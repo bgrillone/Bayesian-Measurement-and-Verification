@@ -843,7 +843,8 @@ def multiprocessing_bayesian_comparison(df):
         else:
             try:
                 model_results = bayesian_model_comparison_whole_year(df_preprocessed, building_id)
-                final_export = dat.append(model_results)
+                res = pd.read_csv("/root/benedetto/results/bayes_results.csv")
+                final_export = res.append(model_results)
                 final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
                 print('Successfully added ' + building_id + ' to results file')
             except:
