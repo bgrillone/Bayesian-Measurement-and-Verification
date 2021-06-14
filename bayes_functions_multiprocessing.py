@@ -370,7 +370,7 @@ def bayesian_model_comparison (df):
     return export_df
 
 def bayesian_model_comparison_whole_year (df, building_id):
-    #df = pd.read_csv("/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Panther_lodging_Janice_preprocess.csv")
+    #df = pd.read_csv("/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Mouse_health_Ileana_preprocess.csv")
     # Preprocess
     df["log_v"] = log_electricity = np.log(df["total_electricity"]).values
 
@@ -452,9 +452,14 @@ def bayesian_model_comparison_whole_year (df, building_id):
         sigma_bf = pm.Exponential("sigma_bf", 1.0)
         a = pm.Normal("a", mu=0.0, sigma=1.0)
         sigma_a = pm.Exponential("sigma_a", 1.0)
+        k = pm.Gamma('k', alpha=100, beta=100)
+        lambda_ = pm.Gamma('lambda_', alpha=3.5, beta=0.01)
 
-        btc = pm.Normal("btc", mu=0.0, sigma=1.0, dims="daypart")
-        bth = pm.Normal("bth", mu=0.0, sigma=1.0, dims="daypart")
+        #btc = pm.Normal("btc", mu=0.0, sigma=1.0, dims="daypart")
+        #bth = pm.Normal("bth", mu=0.0, sigma=1.0, dims="daypart")
+
+        btc = pm.Weibull('btc', alpha=k, beta=lambda_, dims="daypart")
+        bth = pm.Weibull('bth', alpha=k, beta=lambda_, dims="daypart")
 
         btclp = pm.Normal("btclp", mu=0.0, sigma=1.0, dims="daypart")
         bthlp = pm.Normal("bthlp", mu=0.0, sigma=1.0, dims="daypart")
@@ -477,7 +482,8 @@ def bayesian_model_comparison_whole_year (df, building_id):
              bc1[profile_cluster_idx] * fs_cos_1 + bc2[profile_cluster_idx] * fs_cos_2 + \
              bc3[profile_cluster_idx] * fs_cos_3 + \
              btclp[daypart] * cooling_temp_lp + \
-             bthlp[daypart] * heating_temp_lp + btc[daypart] * cooling_temp + \
+             bthlp[daypart] * heating_temp_lp + \
+             btc[daypart] * cooling_temp + \
              bth[daypart] * heating_temp
 
         # Model error:
@@ -839,6 +845,7 @@ def multiprocessing_bayesian_comparison(df):
                 model_results = bayesian_model_comparison_whole_year(df_preprocessed, building_id)
                 final_export = dat.append(model_results)
                 final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
+                print('Successfully added ' + building_id + 'to results file')
             except:
                 print('Modeling error for ' + building_id + '. Skipping to the next building')
     else:
