@@ -449,13 +449,13 @@ def bayesian_model_comparison_whole_year (df, building_id):
 
         # Hyperpriors:
         #BoundNormal = pm.Bound(pm.Normal, lower=0.0)
-        mu_btc = pm.Normal("btc", mu=0.0, sigma=1.0)
+        mu_btc = pm.Normal("mu_btc", mu=0.0, sigma=1.0)
         sigma_btc = pm.Exponential("sigma_btc", 1.0)
-        mu_bth = pm.Normal("bth", mu=0.0, sigma=1.0)
+        mu_bth = pm.Normal("mu_bth", mu=0.0, sigma=1.0)
         sigma_bth = pm.Exponential("sigma_bth", 1.0)
-        mu_btclp = pm.Normal("btclp", mu=0.0, sigma=1.0)
+        mu_btclp = pm.Normal("mu_btclp", mu=0.0, sigma=1.0)
         sigma_btclp = pm.Exponential("sigma_btclp", 1.0)
-        mu_bthlp = pm.Normal("bthlp", mu=0.0, sigma=1.0)
+        mu_bthlp = pm.Normal("mu_bthlp", mu=0.0, sigma=1.0)
         sigma_bthlp = pm.Exponential("sigma_bthlp", 1.0)
         bf = pm.Normal("bf", mu=0.0, sigma=1.0)
         sigma_bf = pm.Exponential("sigma_bf", 1.0)
