@@ -370,7 +370,7 @@ def bayesian_model_comparison (df):
     return export_df
 
 def bayesian_model_comparison_whole_year (df, building_id):
-    #df = pd.read_csv("/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Mouse_health_Ileana_preprocess.csv")
+    #df = pd.read_csv("/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Panther_office_Christian_preprocess.csv")
     # Preprocess
     df["log_v"] = log_electricity = np.log(df["total_electricity"]).values
 
@@ -448,21 +448,36 @@ def bayesian_model_comparison_whole_year (df, building_id):
         heating_temp_lp = pm.Data("heating_temp_lp", outdoor_temp_lp_h_train, dims="obs_id")
 
         # Hyperpriors:
+        BoundNormal = pm.Bound(pm.Normal, lower=0.0)
+        bt = BoundNormal("bt", mu=0.0, sigma=1.0)
+        sigma_bt = pm.Exponential("sigma_bt", 1.0)
         bf = pm.Normal("bf", mu=0.0, sigma=1.0)
         sigma_bf = pm.Exponential("sigma_bf", 1.0)
         a = pm.Normal("a", mu=0.0, sigma=1.0)
         sigma_a = pm.Exponential("sigma_a", 1.0)
-        #k = pm.Gamma('k', alpha=100, beta=100)
-        #lambda_ = pm.Gamma('lambda_', alpha=3.5, beta=0.01)
+        # k = pm.Gamma('k', alpha=15, beta=15)
+        # lambda_ = pm.Gamma('lambda_', alpha=15, beta=15)
+        # bounded_laplacian = pm.Bound(pm.Laplace, lower=0, upper=5)
 
-        btc = pm.Normal("btc", mu=0.0, sigma=1.0, dims="daypart")
-        bth = pm.Normal("bth", mu=0.0, sigma=1.0, dims="daypart")
+        # btc = pm.Uniform("btc", lower=0, upper = 5, dims="daypart")
+        # bth = pm.Uniform("bth", lower=0, upper = 5, dims="daypart")
+        # btclp = pm.Uniform("btclp", lower=0, upper = 5, dims="daypart")
+        # bthlp = pm.Uniform("bthlp", lower=0, upper = 5, dims="daypart")
 
-        #btc = pm.Weibull('btc', alpha=k, beta=lambda_, dims="daypart")
-        #bth = pm.Weibull('bth', alpha=k, beta=lambda_, dims="daypart")
+        btc = BoundNormal("btc", mu=bt, sigma=sigma_bt, dims="profile_cluster")
+        bth = BoundNormal("bth", mu=bt, sigma=sigma_bt, dims="profile_cluster")
+        btclp = BoundNormal("btclp", mu=bt, sigma=sigma_bt, dims="profile_cluster")
+        bthlp = BoundNormal("bthlp", mu=bt, sigma=sigma_bt, dims="profile_cluster")
 
-        btclp = pm.Normal("btclp", mu=0.0, sigma=1.0, dims="daypart")
-        bthlp = pm.Normal("bthlp", mu=0.0, sigma=1.0, dims="daypart")
+        # btc = pm.Weibull('btc', alpha=k, beta=lambda_, dims="daypart")
+        # bth = pm.Weibull('bth', alpha=k, beta=lambda_, dims="daypart")
+        # btclp = pm.Weibull('btclp', alpha=k, beta=lambda_, dims="daypart")
+        # bthlp = pm.Weibull('bthlp', alpha=k, beta=lambda_, dims="daypart")
+
+        # btc = bounded_laplacian('btc', mu=0, b=4, dims = "daypart")
+        # bth = bounded_laplacian('bth', mu=0, b=4, dims="daypart")
+        # btclp = bounded_laplacian('btclp', mu=0, b=4, dims = "daypart")
+        # bthlp = bounded_laplacian('bthlp', mu=0, b=4, dims="daypart")
 
         # Varying intercepts
         a_cluster = pm.Normal("a_cluster", mu=a, sigma=sigma_a, dims=("profile_cluster"))
@@ -481,10 +496,11 @@ def bayesian_model_comparison_whole_year (df, building_id):
              bs2[profile_cluster_idx] * fs_sin_2 + bs3[profile_cluster_idx] * fs_sin_3 + \
              bc1[profile_cluster_idx] * fs_cos_1 + bc2[profile_cluster_idx] * fs_cos_2 + \
              bc3[profile_cluster_idx] * fs_cos_3 + \
-             btclp[daypart] * cooling_temp_lp + \
-             bthlp[daypart] * heating_temp_lp + \
-             btc[daypart] * cooling_temp + \
-             bth[daypart] * heating_temp
+             btclp[profile_cluster_idx] * cooling_temp_lp + \
+             bthlp[profile_cluster_idx] * heating_temp_lp + \
+             btc[profile_cluster_idx] * cooling_temp + \
+             bth[profile_cluster_idx] * heating_temp
+
 
         # Model error:
         sigma = pm.Exponential("sigma", 1.0)
@@ -785,6 +801,16 @@ def bayesian_model_comparison_whole_year (df, building_id):
     cp_results = pd.DataFrame(data=cp_data)
     cp_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_cp.csv", index=False)
 
+    # model comparison
+
+    df_loo = az.compare({"hierarchical": partial_pooling_trace,
+                         "unpooled": no_pooling_trace,
+                         "pooled": complete_pooling_trace})
+
+    df_waic = az.compare({"hierarchical": partial_pooling_trace,
+                         "unpooled": no_pooling_trace,
+                         "pooled": complete_pooling_trace}, ic='waic')
+
     export_data = {'partial_pooling_cvrmse': [partial_pool_cvrmse],
                    'no_pooling_cvrmse': [no_pool_cvrmse],
                    'complete_pooling_cvrmse': [complete_pool_cvrmse],
@@ -800,6 +826,12 @@ def bayesian_model_comparison_whole_year (df, building_id):
                    'partial_pooling_nmbe':[partial_pool_nmbe],
                    'no_pooling_nmbe':[no_pool_nmbe],
                    'complete_pooling_nmbe':[complete_pool_nmbe],
+                   'partial_pooling_loo':[df_loo.loc['hierarchical']['loo']],
+                   'no_pooling_loo':[df_loo.loc['unpooled']['loo']],
+                   'complete_pooling_loo':[df_loo.loc['pooled']['loo']],
+                   'partial_pooling_waic':[df_waic.loc['hierarchical']['waic']],
+                   'no_pooling_waic': [df_waic.loc['unpooled']['waic']],
+                   'complete_pooling_waic': [df_waic.loc['pooled']['waic']],
                    'id':building_id}
 
     export_df = pd.DataFrame(data=export_data)
