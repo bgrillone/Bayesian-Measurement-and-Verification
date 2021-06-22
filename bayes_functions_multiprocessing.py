@@ -865,7 +865,8 @@ def bayesian_model_comparison_whole_year (df, building_id):
     return export_df
 
 def bayesian_model_comparison_model_spec (df, building_id):
-    #df = pd.read_csv("/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Fox_education_Gloria_preprocess.csv")
+    #df = pd.read_csv("/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Crow_education_Omer_preprocess.csv")
+    #df = pd.read_csv("/root/benedetto/results/buildings/Fox_education_Gloria_preprocess.csv")
     # Preprocess
     df["log_v"] = log_electricity = np.log(df["total_electricity"]).values
 
@@ -1469,12 +1470,14 @@ def multiprocessing_bayesian_comparison(df):
     try:
         df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + building_id + "_preprocess.csv")
         print(building_id + ' preprocessed data was retrieved succesfully')
-    except:
+    except Exception as e:
+        print(e)
         print('Running preprocessing for ' + building_id)
         subprocess.run(["Rscript", "ashrae_preprocess_server.R", building_id, building_id])
         try:
             df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + building_id + "_preprocess.csv")
-        except:
+        except Exception as e:
+            print(e)
             print("Preprocessing failed for " + building_id + '. Skipping to next building.')
 
     try:
@@ -1494,12 +1497,14 @@ def multiprocessing_bayesian_comparison(df):
                 final_export = res.append(model_results)
                 final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
                 print('Successfully added ' + building_id + ' to results file')
-            except:
+            except Exception as e:
+                print(e)
                 print('Modeling error for ' + building_id + '. Skipping to the next building')
     else:
         try:
             model_results = bayesian_model_comparison_model_spec(df_preprocessed, building_id)
             final_export = model_results
             final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
-        except:
+        except Exception as e:
+            print(e)
             print('Modeling error for ' + building_id + '. Skipping to the next building')
