@@ -1359,7 +1359,7 @@ def bayesian_model_comparison_model_spec (df, building_id):
     # Sample fitting
 
     with nuts_binomial:
-        nuts_binomial_trace = pm.sample(4000)
+        nuts_binomial_trace = pm.sample(4000, chains = 4, cores = 1)
 
     # Sampling from the posterior setting test data to check the predictions on unseen data
 
