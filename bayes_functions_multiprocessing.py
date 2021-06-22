@@ -1228,15 +1228,6 @@ def bayesian_model_comparison_model_spec (df, building_id):
     az.plot_trace(advi_nodep_trace['btc'][None, :, :])
     plt.savefig('/root/benedetto/results/plots/' + building_id + '_btc_and.png')
 
-    az.plot_trace(advi_dep_trace['tbal_h'][None, :, :])
-    plt.savefig('/Users/beegroup/Downloads/' + building_id + '_tbal_h_and.png')
-    az.plot_trace(advi_dep_trace['tbal_c'][None, :, :])
-    plt.savefig('/Users/beegroup/Downloads/' + building_id + '_tbal_c_and.png')
-    az.plot_trace(advi_dep_trace['bth'][None, :, :])
-    plt.savefig('/Users/beegroup/Downloads/' + building_id + '_bth_and.png')
-    az.plot_trace(advi_dep_trace['btc'][None, :, :])
-    plt.savefig('/Users/beegroup/Downloads/' + building_id + '_btc_and.png')
-
     # advi_nd_elbo = pd.DataFrame(
     #     {'log-ELBO': -np.log(approx_nodep.hist),
     #      'n': np.arange(approx_nodep.hist.shape[0])})
