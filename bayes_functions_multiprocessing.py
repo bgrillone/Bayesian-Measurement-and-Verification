@@ -1054,15 +1054,13 @@ def bayesian_model_comparison_model_spec (df, building_id):
     plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_h_ad.png')
     az.plot_trace(advi_dep_trace['dep_c'][None, :, :])
     plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_c_ad.png')
-    plt.clf()
 
-    advi_d_elbo = pd.DataFrame(
-        {'log-ELBO': -np.log(approx_dep.hist),
-         'n': np.arange(approx_dep.hist.shape[0])})
-
-    plt.plot(advi_d_elbo['n'], advi_d_elbo['log-ELBO'])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_elbo_ad.png')
-    plt.clf()
+    # advi_d_elbo = pd.DataFrame(
+    #     {'log-ELBO': -np.log(approx_dep.hist),
+    #      'n': np.arange(approx_dep.hist.shape[0])})
+    #
+    # plt.plot(advi_d_elbo['n'], advi_d_elbo['log-ELBO'])
+    # plt.savefig('/root/benedetto/results/plots/' + building_id + '_elbo_ad.png')
 
     # Calculate predictions and HDI
 
@@ -1238,14 +1236,13 @@ def bayesian_model_comparison_model_spec (df, building_id):
     plt.savefig('/Users/beegroup/Downloads/' + building_id + '_bth_and.png')
     az.plot_trace(advi_dep_trace['btc'][None, :, :])
     plt.savefig('/Users/beegroup/Downloads/' + building_id + '_btc_and.png')
-    plt.clf()
 
-    advi_nd_elbo = pd.DataFrame(
-        {'log-ELBO': -np.log(approx_nodep.hist),
-         'n': np.arange(approx_nodep.hist.shape[0])})
-
-    plt.plot(advi_nd_elbo['n'], advi_nd_elbo['log-ELBO'])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_elbo_and.png')
+    # advi_nd_elbo = pd.DataFrame(
+    #     {'log-ELBO': -np.log(approx_nodep.hist),
+    #      'n': np.arange(approx_nodep.hist.shape[0])})
+    #
+    # plt.plot(advi_nd_elbo['n'], advi_nd_elbo['log-ELBO'])
+    # plt.savefig('/root/benedetto/results/plots/' + building_id + '_elbo_and.png')
 
     # Calculate predictions and HDI
 
