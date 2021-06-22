@@ -1060,7 +1060,7 @@ def bayesian_model_comparison_model_spec (df, building_id):
          'n': np.arange(approx_dep.hist.shape[0])})
 
     plt.plot(advi_d_elbo['n'], advi_d_elbo['log-ELBO'])
-    plt.savefig('/root/benedetto/results/plots' + building_id + '_elbo_ad.png')
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_elbo_ad.png')
     # Calculate predictions and HDI
 
     advi_dep_predictions = np.exp(advi_dep_posterior['y'].mean(0))
@@ -1226,10 +1226,6 @@ def bayesian_model_comparison_model_spec (df, building_id):
     plt.savefig('/root/benedetto/results/plots/' + building_id + '_bth_and.png')
     az.plot_trace(advi_nodep_trace['btc'][None, :, :])
     plt.savefig('/root/benedetto/results/plots/' + building_id + '_btc_and.png')
-    az.plot_trace(advi_nodep_trace['dep_h'][None, :, :])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_h_and.png')
-    az.plot_trace(advi_nodep_trace['dep_c'][None, :, :])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_c_and.png')
 
     advi_nd_elbo = pd.DataFrame(
         {'log-ELBO': -np.log(approx_nodep.hist),
