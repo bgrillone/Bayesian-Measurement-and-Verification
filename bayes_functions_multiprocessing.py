@@ -951,9 +951,9 @@ def bayesian_model_comparison_model_spec (df, building_id):
 
         # Hyperpriors:
         BoundNormal = pm.Bound(pm.Normal, lower=0.0, upper=1.0)
-        mu_btc = pm.Normal("mu_btc", mu=0.0, sigma=1.0)
+        #mu_btc = pm.Normal("mu_btc", mu=0.0, sigma=1.0)
         sigma_btc = pm.Exponential("sigma_btc", 1.0)
-        mu_bth = pm.Normal("mu_bth", mu=0.0, sigma=1.0)
+        #mu_bth = pm.Normal("mu_bth", mu=0.0, sigma=1.0)
         sigma_bth = pm.Exponential("sigma_bth", 1.0)
         mu_btclp = pm.Normal("mu_btclp", mu=0.0, sigma=1.0)
         sigma_btclp = pm.Exponential("sigma_btclp", 1.0)
@@ -964,8 +964,8 @@ def bayesian_model_comparison_model_spec (df, building_id):
         a = pm.Normal("a", mu=0.0, sigma=1.0)
         sigma_a = pm.Exponential("sigma_a", 1.0)
 
-        btc = pm.Normal("btc", mu=mu_btc, sigma=sigma_btc, dims="profile_cluster")
-        bth = pm.Normal("bth", mu=mu_bth, sigma=sigma_bth, dims="profile_cluster")
+        btc = pm.HalfNormal("btc", sigma=sigma_btc, dims="profile_cluster")
+        bth = pm.HalfNormal("bth", sigma=sigma_bth, dims="profile_cluster")
         btclp = pm.Normal("btclp", mu=mu_btclp, sigma=sigma_btclp, dims="profile_cluster")
         bthlp = pm.Normal("bthlp", mu=mu_bthlp, sigma=sigma_bthlp, dims="profile_cluster")
 
@@ -1113,11 +1113,11 @@ def bayesian_model_comparison_model_spec (df, building_id):
                'higher_bound': advi_dep_higher_bound}
 
     ad_results = pd.DataFrame(data=ad_data)
-    ad_results.to_csv("/root/benedetto/results/predictions_nuts_advi/" + building_id + "_ad.csv", index=False)
+    ad_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_ad.csv", index=False)
 
-    # Model 2: ADVI no dep
+    # Model 2: ADVI dep with positive temperature coefficients
 
-    with pm.Model(coords=coords) as advi_nodep:
+    with pm.Model(coords=coords) as advi_dep_2:
         profile_cluster_idx = pm.Data("profile_cluster_idx", clusters_train, dims="obs_id")
         daypart = pm.Data("daypart", dayparts_train, dims="obs_id")
         weekday = pm.Data("weekday", weekdays_train, dims="obs_id")
@@ -1138,9 +1138,9 @@ def bayesian_model_comparison_model_spec (df, building_id):
 
         # Hyperpriors:
         BoundNormal = pm.Bound(pm.Normal, lower=0.0, upper=1.0)
-        mu_btc = pm.Normal("mu_btc", mu=0.0, sigma=1.0)
+        #mu_btc = pm.Normal("mu_btc", mu=0.0, sigma=1.0)
         sigma_btc = pm.Exponential("sigma_btc", 1.0)
-        mu_bth = pm.Normal("mu_bth", mu=0.0, sigma=1.0)
+        #mu_bth = pm.Normal("mu_bth", mu=0.0, sigma=1.0)
         sigma_bth = pm.Exponential("sigma_bth", 1.0)
         mu_btclp = pm.Normal("mu_btclp", mu=0.0, sigma=1.0)
         sigma_btclp = pm.Exponential("sigma_btclp", 1.0)
@@ -1151,8 +1151,8 @@ def bayesian_model_comparison_model_spec (df, building_id):
         a = pm.Normal("a", mu=0.0, sigma=1.0)
         sigma_a = pm.Exponential("sigma_a", 1.0)
 
-        btc = pm.Normal("btc", mu=mu_btc, sigma=sigma_btc, dims="profile_cluster")
-        bth = pm.Normal("bth", mu=mu_bth, sigma=sigma_bth, dims="profile_cluster")
+        btc = pm.HalfNormal("btc", sigma=sigma_btc, dims="profile_cluster")
+        bth = pm.HalfNormal("bth", sigma=sigma_bth, dims="profile_cluster")
         btclp = pm.Normal("btclp", mu=mu_btclp, sigma=sigma_btclp, dims="profile_cluster")
         bthlp = pm.Normal("bthlp", mu=mu_bthlp, sigma=sigma_bthlp, dims="profile_cluster")
 
@@ -1172,13 +1172,19 @@ def bayesian_model_comparison_model_spec (df, building_id):
         tbal_h = pm.Normal("tbal_h", mu=18.0, sigma=1.5, dims="daypart")
         tbal_c = pm.Normal("tbal_c", mu=18.0, sigma=1.5, dims="daypart")
 
+        # Dependence
+        dep_h = BoundNormal("dep_h", mu=0.5, sigma=0.5, dims="daypart")
+        dep_c = BoundNormal("dep_c", mu=0.5, sigma=0.5, dims="daypart")
+
         # Expected value per county:
         mu = a_cluster[profile_cluster_idx] + bs1[profile_cluster_idx] * fs_sin_1 + \
              bs2[profile_cluster_idx] * fs_sin_2 + bs3[profile_cluster_idx] * fs_sin_3 + \
              bc1[profile_cluster_idx] * fs_cos_1 + bc2[profile_cluster_idx] * fs_cos_2 + \
              bc3[profile_cluster_idx] * fs_cos_3 + \
-             btc[profile_cluster_idx] * (outdoor_temp - tbal_c[daypart]) * ((outdoor_temp - tbal_c[daypart]) > 0) + \
-             bth[profile_cluster_idx] * (tbal_h[daypart] - outdoor_temp) * ((tbal_h[daypart] - outdoor_temp) > 0)
+             btc[profile_cluster_idx] * (outdoor_temp - tbal_c[daypart]) * ((outdoor_temp - tbal_c[daypart]) > 0) * (
+                     dep_c[daypart] > 0.5) * (btc[profile_cluster_idx]>=0)  + \
+             bth[profile_cluster_idx] * (tbal_h[daypart] - outdoor_temp) * ((tbal_h[daypart] - outdoor_temp) > 0) * (
+                     dep_h[daypart] > 0.5) * (bth[profile_cluster_idx]>=0)
         # btclp[profile_cluster_idx] * cooling_temp_lp + \
         # bthlp[profile_cluster_idx] * heating_temp_lp + \
         # btc[profile_cluster_idx] * cooling_temp + \
@@ -1190,16 +1196,16 @@ def bayesian_model_comparison_model_spec (df, building_id):
         # Likelihood
         y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity_train, dims="obs_id")
 
-    # Fitting
-    with advi_nodep:
-        approx_nodep = pm.fit(n=50000,
+        # Fitting
+    with advi_dep_2:
+        approx_dep_2 = pm.fit(n=50000,
                         method='fullrank_advi',
                         callbacks=[CheckParametersConvergence(tolerance=0.01)])
-        advi_nodep_trace = approx_nodep.sample(1000)
+        advi_dep_2_trace = approx_dep_2.sample(1000)
 
-    # Sampling from the posterior setting test data to check the predictions on unseen data
+        # Sampling from the posterior setting test data to check the predictions on unseen data
 
-    with advi_nodep:
+    with advi_dep_2:
         pm.set_data({"profile_cluster_idx": clusters_test,
                      "daypart": dayparts_test,
                      # "weekday":weekdays_test,
@@ -1216,64 +1222,86 @@ def bayesian_model_comparison_model_spec (df, building_id):
                      "outdoor_temp": outdoor_temp_test
                      })
 
-        advi_nodep_posterior_hdi = pm.sample_posterior_predictive(advi_nodep_trace, keep_size=True)
-        advi_nodep_posterior = pm.sample_posterior_predictive(advi_nodep_trace)
-        advi_nodep_prior = pm.sample_prior_predictive(150)
+        advi_dep_2_posterior_hdi = pm.sample_posterior_predictive(advi_dep_2_trace, keep_size=True)
+        advi_dep_2_posterior = pm.sample_posterior_predictive(advi_dep_2_trace)
+        advi_dep_2_prior = pm.sample_prior_predictive(150)
 
-    az.plot_trace(advi_nodep_trace['tbal_h'][None, :, :])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_h_and.png')
-    az.plot_trace(advi_nodep_trace['tbal_c'][None, :, :])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_c_and.png')
-    az.plot_trace(advi_nodep_trace['bth'][None, :, :])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_bth_and.png')
-    az.plot_trace(advi_nodep_trace['btc'][None, :, :])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_btc_and.png')
+        # save traceplots here
 
-    # advi_nd_elbo = pd.DataFrame(
-    #     {'log-ELBO': -np.log(approx_nodep.hist),
-    #      'n': np.arange(approx_nodep.hist.shape[0])})
+        # Debugging ADVI to understand if the estimation is converging
+
+    az.plot_trace(advi_dep_2_trace['tbal_h'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_h_ad.png')
+    az.plot_trace(advi_dep_2_trace['tbal_c'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_c_ad.png')
+    az.plot_trace(advi_dep_2_trace['bth'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_bth_ad.png')
+    az.plot_trace(advi_dep_2_trace['btc'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_btc_ad.png')
+    az.plot_trace(advi_dep_2_trace['dep_h'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_h_ad.png')
+    az.plot_trace(advi_dep_2_trace['dep_c'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_c_ad.png')
+
+    # advi_d_elbo = pd.DataFrame(
+    #     {'log-ELBO': -np.log(approx_dep.hist),
+    #      'n': np.arange(approx_dep.hist.shape[0])})
     #
-    # plt.plot(advi_nd_elbo['n'], advi_nd_elbo['log-ELBO'])
-    # plt.savefig('/root/benedetto/results/plots/' + building_id + '_elbo_and.png')
+    # plt.plot(advi_d_elbo['n'], advi_d_elbo['log-ELBO'])
+    # plt.savefig('/root/benedetto/results/plots/' + building_id + '_elbo_ad.png')
 
     # Calculate predictions and HDI
 
-    advi_nodep_predictions = np.exp(advi_nodep_posterior['y'].mean(0))
-    hdi_data = az.hdi(advi_nodep_posterior_hdi)
-    advi_nodep_lower_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='lower'))).flatten()
-    advi_nodep_higher_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='higher'))).flatten()
+    advi_dep_2_predictions = np.exp(advi_dep_2_posterior['y'].mean(0))
+    hdi_data_dep_2 = az.hdi(advi_dep_2_posterior_hdi)
+    advi_dep_2_lower_bound = np.array(np.exp(hdi_data_dep_2.to_array().sel(hdi='lower'))).flatten()
+    advi_dep_2_higher_bound = np.array(np.exp(hdi_data_dep_2.to_array().sel(hdi='higher'))).flatten()
 
     # Calculate adjusted coverage
-    advi_nodep_gamma = np.where(test_df.total_electricity > advi_nodep_higher_bound,
-                                1 + ((test_df.total_electricity - advi_nodep_higher_bound) / (
-                                    test_df.total_electricity)),
-                                np.where(test_df.total_electricity < advi_nodep_lower_bound,
-                                         1 + ((advi_nodep_lower_bound - test_df.total_electricity) / (
-                                             test_df.total_electricity)),
-                                         1))
+    advi_dep_2_gamma = np.where(test_df.total_electricity > advi_dep_2_higher_bound,
+                              1 + ((test_df.total_electricity - advi_dep_2_higher_bound) / (
+                                  test_df.total_electricity)),
+                              np.where(test_df.total_electricity < advi_dep_2_lower_bound,
+                                       1 + ((advi_dep_2_lower_bound - test_df.total_electricity) / (
+                                           test_df.total_electricity)),
+                                       1))
 
-    advi_nodep_adjusted_coverage = np.nanmean(advi_nodep_gamma * (advi_nodep_higher_bound) / (advi_nodep_lower_bound))
+    advi_dep_2_adjusted_coverage = np.nanmean(
+        advi_dep_2_gamma * (advi_dep_2_higher_bound) / (advi_dep_2_lower_bound))
 
     # Calculate cvrmse and coverage of the HDI
-    advi_nodep_mse = mean_squared_error(test_df.total_electricity, advi_nodep_predictions)
-    advi_nodep_rmse = sqrt(advi_nodep_mse)
-    advi_nodep_cvrmse = advi_nodep_rmse / test_df.total_electricity.mean()
-    advi_nodep_coverage = sum((advi_nodep_lower_bound <= test_df.total_electricity) & (
-            test_df.total_electricity <= advi_nodep_higher_bound)) * 100 / len(test_df)
-    advi_nodep_confidence_length = sum(advi_nodep_higher_bound) - sum(advi_nodep_lower_bound)
+    advi_dep_2_mse = mean_squared_error(test_df.total_electricity, advi_dep_2_predictions)
+    advi_dep_2_rmse = sqrt(advi_dep_2_mse)
+    advi_dep_2_cvrmse = advi_dep_2_rmse / test_df.total_electricity.mean()
+    advi_dep_2_coverage = sum((advi_dep_2_lower_bound <= test_df.total_electricity) & (
+            test_df.total_electricity <= advi_dep_2_higher_bound)) * 100 / len(test_df)
+    advi_dep_2_confidence_length = sum(advi_dep_2_higher_bound) - sum(advi_dep_2_lower_bound)
 
     # Calculate NMBE
-    advi_nodep_nmbe = np.sum(test_df.total_electricity - advi_nodep_predictions) * 100 / len(
+    advi_dep_2_nmbe = np.sum(test_df.total_electricity - advi_dep_2_predictions) * 100 / len(
         test_df) / test_df.total_electricity.mean()
 
-    # Print df
-    and_data = {'t': test_df['t'],
-                'prediction': advi_nodep_predictions,
-                'lower_bound': advi_nodep_lower_bound,
-                'higher_bound': advi_nodep_higher_bound}
+    # Bokeh plots to compare NUTS and ADVI
+    # p1 = figure(plot_width=800, plot_height=400, x_axis_type='datetime')
+    # p1.line(test_df['t'], advi_dep_2_predictions, color="navy", alpha=0.8)
+    # p1.line(test_df['t'], test_df['total_electricity'], color="orange", alpha=0.6)
+    # p1.varea(x=test_df['t'], y1=advi_dep_2_lower_bound, y2=advi_dep_2_higher_bound, color='gray', alpha=0.2)
+    #
+    # p2 = figure(plot_width=800, plot_height=400, x_axis_type='datetime')
+    # p2.line(test_df['t'], nuts_binomial_predictions, color="navy", alpha=0.8)
+    # p2.line(test_df['t'], test_df['total_electricity'], color="orange", alpha=0.6)
+    # p2.varea(x=test_df['t'], y1=nuts_binomial_lower_bound, y2=nuts_binomial_higher_bound, color='gray', alpha=0.2)
+    # show(p2)
 
-    and_results = pd.DataFrame(data=and_data)
-    and_results.to_csv("/root/benedetto/results/predictions_nuts_advi/" + building_id + "_and.csv", index=False)
+    # Print df
+    ad_2_data = {'t': test_df['t'],
+               'prediction': advi_dep_2_predictions,
+               'lower_bound': advi_dep_2_lower_bound,
+               'higher_bound': advi_dep_2_higher_bound}
+
+    ad_2_results = pd.DataFrame(data=ad_2_data)
+    ad_2_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_ad_2.csv", index=False)
+
 
     # Model 3: NUTS binomial
 
@@ -1298,9 +1326,9 @@ def bayesian_model_comparison_model_spec (df, building_id):
 
         # Hyperpriors:
         BoundNormal = pm.Bound(pm.Normal, lower=0.0, upper=1.0)
-        mu_btc = pm.Normal("mu_btc", mu=0.0, sigma=1.0)
+        #mu_btc = pm.Normal("mu_btc", mu=0.0, sigma=1.0)
         sigma_btc = pm.Exponential("sigma_btc", 1.0)
-        mu_bth = pm.Normal("mu_bth", mu=0.0, sigma=1.0)
+        #mu_bth = pm.Normal("mu_bth", mu=0.0, sigma=1.0)
         sigma_bth = pm.Exponential("sigma_bth", 1.0)
         mu_btclp = pm.Normal("mu_btclp", mu=0.0, sigma=1.0)
         sigma_btclp = pm.Exponential("sigma_btclp", 1.0)
@@ -1314,9 +1342,8 @@ def bayesian_model_comparison_model_spec (df, building_id):
         # lambda_ = pm.Gamma('lambda_', alpha=15, beta=15)
         # bounded_laplacian = pm.Bound(pm.Laplace, lower=0, upper=5)
 
-
-        btc = pm.Normal("btc", mu=mu_btc, sigma=sigma_btc, dims="profile_cluster")
-        bth = pm.Normal("bth", mu=mu_bth, sigma=sigma_bth, dims="profile_cluster")
+        btc = pm.HalfNormal("btc", sigma=sigma_btc, dims="profile_cluster")
+        bth = pm.HalfNormal("bth", sigma=sigma_bth, dims="profile_cluster")
         btclp = pm.Normal("btclp", mu=mu_btclp, sigma=sigma_btclp, dims="profile_cluster")
         bthlp = pm.Normal("bthlp", mu=mu_bthlp, sigma=sigma_bthlp, dims="profile_cluster")
 
@@ -1359,7 +1386,7 @@ def bayesian_model_comparison_model_spec (df, building_id):
     # Sample fitting
 
     with nuts_binomial:
-        nuts_binomial_trace = pm.sample(4000, chains = 4, cores = 1)
+        nuts_binomial_trace = pm.sample(5000, tune = 2000, chains = 4, cores = 1)
 
     # Sampling from the posterior setting test data to check the predictions on unseen data
 
@@ -1437,17 +1464,184 @@ def bayesian_model_comparison_model_spec (df, building_id):
                'higher_bound': nuts_binomial_higher_bound}
 
     nb_results = pd.DataFrame(data=nb_data)
-    nb_results.to_csv("/root/benedetto/results/predictions_nuts_advi/" + building_id + "_nb.csv", index=False)
+    nb_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_nb.csv", index=False)
 
+    # Model 4 NUTS with positive temperature coefficients
+
+    with pm.Model(coords=coords) as nuts_binomial_2:
+        profile_cluster_idx = pm.Data("profile_cluster_idx", clusters_train, dims="obs_id")
+        daypart = pm.Data("daypart", dayparts_train, dims="obs_id")
+        weekday = pm.Data("weekday", weekdays_train, dims="obs_id")
+
+        fs_sin_1 = pm.Data("fs_sin_1", daypart_fs_sin_1_train, dims="obs_id")
+        fs_sin_2 = pm.Data("fs_sin_2", daypart_fs_sin_2_train, dims="obs_id")
+        fs_sin_3 = pm.Data("fs_sin_3", daypart_fs_sin_3_train, dims="obs_id")
+
+        fs_cos_1 = pm.Data("fs_cos_1", daypart_fs_cos_1_train, dims="obs_id")
+        fs_cos_2 = pm.Data("fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
+        fs_cos_3 = pm.Data("fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
+
+        cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
+        heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
+        cooling_temp_lp = pm.Data("cooling_temp_lp", outdoor_temp_lp_c_train, dims="obs_id")
+        heating_temp_lp = pm.Data("heating_temp_lp", outdoor_temp_lp_h_train, dims="obs_id")
+        outdoor_temp = pm.Data("outdoor_temp", outdoor_temp_train, dims="obs_id")
+
+        # Hyperpriors:
+        BoundNormal = pm.Bound(pm.Normal, lower=0.0, upper=1.0)
+        #mu_btc = pm.Normal("mu_btc", mu=0.0, sigma=1.0)
+        sigma_btc = pm.Exponential("sigma_btc", 1.0)
+        #mu_bth = pm.Normal("mu_bth", mu=0.0, sigma=1.0)
+        sigma_bth = pm.Exponential("sigma_bth", 1.0)
+        mu_btclp = pm.Normal("mu_btclp", mu=0.0, sigma=1.0)
+        sigma_btclp = pm.Exponential("sigma_btclp", 1.0)
+        mu_bthlp = pm.Normal("mu_bthlp", mu=0.0, sigma=1.0)
+        sigma_bthlp = pm.Exponential("sigma_bthlp", 1.0)
+        bf = pm.Normal("bf", mu=0.0, sigma=1.0)
+        sigma_bf = pm.Exponential("sigma_bf", 1.0)
+        a = pm.Normal("a", mu=0.0, sigma=1.0)
+        sigma_a = pm.Exponential("sigma_a", 1.0)
+        # k = pm.Gamma('k', alpha=15, beta=15)
+        # lambda_ = pm.Gamma('lambda_', alpha=15, beta=15)
+        # bounded_laplacian = pm.Bound(pm.Laplace, lower=0, upper=5)
+
+        btc = pm.HalfNormal("btc", sigma=sigma_btc, dims="profile_cluster")
+        bth = pm.HalfNormal("bth", sigma=sigma_bth, dims="profile_cluster")
+        btclp = pm.Normal("btclp", mu=mu_btclp, sigma=sigma_btclp, dims="profile_cluster")
+        bthlp = pm.Normal("bthlp", mu=mu_bthlp, sigma=sigma_bthlp, dims="profile_cluster")
+
+        # Varying intercepts
+        a_cluster = pm.Normal("a_cluster", mu=a, sigma=sigma_a, dims=("profile_cluster"))
+
+        # Varying slopes:
+        bs1 = pm.Normal("bs1", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+        bs2 = pm.Normal("bs2", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+        bs3 = pm.Normal("bs3", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+
+        bc1 = pm.Normal("bc1", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+        bc2 = pm.Normal("bc2", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+        bc3 = pm.Normal("bc3", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+
+        # Balance temp
+        tbal_h = pm.Normal("tbal_h", mu=18.0, sigma=1.5, dims="daypart")
+        tbal_c = pm.Normal("tbal_c", mu=18.0, sigma=1.5, dims="daypart")
+
+        # Dependence
+        dep_h = pm.Bernoulli("dep_h", p=0.5, dims="daypart")
+        dep_c = pm.Bernoulli("dep_c", p=0.5, dims="daypart")
+
+        # Expected value per county:
+        mu = a_cluster[profile_cluster_idx] + bs1[profile_cluster_idx] * fs_sin_1 + \
+             bs2[profile_cluster_idx] * fs_sin_2 + bs3[profile_cluster_idx] * fs_sin_3 + \
+             bc1[profile_cluster_idx] * fs_cos_1 + bc2[profile_cluster_idx] * fs_cos_2 + \
+             bc3[profile_cluster_idx] * fs_cos_3 + \
+             btc[profile_cluster_idx] * (outdoor_temp - tbal_c[daypart]) * ((outdoor_temp - tbal_c[daypart]) > 0) * (
+                 dep_c[daypart]) * (btc[profile_cluster_idx] >=0) + \
+             bth[profile_cluster_idx] * (tbal_h[daypart] - outdoor_temp) * ((tbal_h[daypart] - outdoor_temp) > 0) * (
+                 dep_h[daypart]) * (bth[profile_cluster_idx] >=0)
+
+        # Model error:
+        sigma = pm.Exponential("sigma", 1.0)
+
+        # Likelihood
+        y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity_train, dims="obs_id")
+
+    # Sample fitting
+
+    with nuts_binomial_2:
+        nuts_binomial_2_trace = pm.sample(5000, tune = 2000, chains=4, cores=1)
+
+    # Sampling from the posterior setting test data to check the predictions on unseen data
+
+    with nuts_binomial_2:
+        pm.set_data({"profile_cluster_idx": clusters_test,
+                     "daypart": dayparts_test,
+                     # "weekday":weekdays_test,
+                     "fs_sin_1": daypart_fs_sin_1_test,
+                     "fs_sin_2": daypart_fs_sin_2_test,
+                     "fs_sin_3": daypart_fs_sin_3_test,
+                     "fs_cos_1": daypart_fs_cos_1_test,
+                     "fs_cos_2": daypart_fs_cos_2_test,
+                     "fs_cos_3": daypart_fs_cos_3_test,
+                     "cooling_temp": outdoor_temp_c_test,
+                     "heating_temp": outdoor_temp_h_test,
+                     "cooling_temp_lp": outdoor_temp_lp_c_test,
+                     "heating_temp_lp": outdoor_temp_lp_h_test,
+                     "outdoor_temp": outdoor_temp_test
+                     })
+
+        nuts_binomial_2_posterior_hdi = pm.sample_posterior_predictive(nuts_binomial_2_trace, keep_size=True)
+        nuts_binomial_2_posterior = pm.sample_posterior_predictive(nuts_binomial_2_trace)
+
+    # Save traceplots for temperatures, dep and elbo here
+
+    # Debugging ADVI to understand if the estimation is converging
+    az.plot_trace(nuts_binomial_2_trace['tbal_h'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_h_nb_2.png')
+    az.plot_trace(nuts_binomial_2_trace['tbal_c'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_c_nb_2.png')
+    az.plot_trace(nuts_binomial_2_trace['bth'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_bth_nb_2.png')
+    az.plot_trace(nuts_binomial_2_trace['btc'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_btc_nb_2.png')
+    az.plot_trace(nuts_binomial_2_trace['dep_h'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_h_nb_2.png')
+    az.plot_trace(nuts_binomial_2_trace['dep_c'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_c_nb_2.png')
+
+    # Calculate predictions and HDI
+
+    nuts_binomial_2_predictions = np.exp(nuts_binomial_2_posterior['y'].mean(0))
+    hdi_data = az.hdi(nuts_binomial_2_posterior_hdi)
+    nuts_binomial_2_lower_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='lower'))).flatten()
+    nuts_binomial_2_higher_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='higher'))).flatten()
+
+    # Calculate adjusted coverage
+    nuts_binomial_2_gamma = np.where(test_df.total_electricity > nuts_binomial_2_higher_bound,
+                                   1 + ((test_df.total_electricity - nuts_binomial_2_higher_bound) / (
+                                       test_df.total_electricity)),
+                                   np.where(test_df.total_electricity < nuts_binomial_2_lower_bound,
+                                            1 + ((nuts_binomial_2_lower_bound - test_df.total_electricity) / (
+                                                test_df.total_electricity)),
+                                            1))
+
+    nuts_binomial_2_adjusted_coverage = np.nanmean(
+        nuts_binomial_2_gamma * (nuts_binomial_2_higher_bound) / (nuts_binomial_2_lower_bound))
+
+    # Calculate cvrmse and coverage of the HDI
+    nuts_binomial_2_mse = mean_squared_error(test_df.total_electricity, nuts_binomial_2_predictions)
+    nuts_binomial_2_rmse = sqrt(nuts_binomial_2_mse)
+    nuts_binomial_2_cvrmse = nuts_binomial_2_rmse / test_df.total_electricity.mean()
+    nuts_binomial_2_coverage = sum((nuts_binomial_2_lower_bound <= test_df.total_electricity) & (
+            test_df.total_electricity <= nuts_binomial_2_higher_bound)) * 100 / len(test_df)
+    nuts_binomial_2_confidence_length = sum(nuts_binomial_2_higher_bound) - sum(nuts_binomial_2_lower_bound)
+
+    # Calculate NMBE
+    nuts_binomial_2_nmbe = np.sum(test_df.total_electricity - nuts_binomial_2_predictions) * 100 / len(
+        test_df) / test_df.total_electricity.mean()
+
+    # Print df
+    nb_2_data = {'t': test_df['t'],
+               'prediction': nuts_binomial_2_predictions,
+               'lower_bound': nuts_binomial_2_lower_bound,
+               'higher_bound': nuts_binomial_2_higher_bound}
+
+    nb_2_results = pd.DataFrame(data=nb_2_data)
+    nb_2_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_nb_2.csv", index=False)
+
+# Export
     export_data = {'nuts_binomial_cvrmse': [nuts_binomial_cvrmse],
+                   'nuts_binomial_2_cvrmse': [nuts_binomial_2_cvrmse],
                    'advi_dep_cvrmse': [advi_dep_cvrmse],
-                   'advi_nodep_cvrmse': [advi_nodep_cvrmse],
+                   'advi_dep_2_cvrmse': [advi_dep_2_cvrmse],
                    'nuts_binomial_adjusted_coverage': [nuts_binomial_adjusted_coverage],
+                   'nuts_binomial_2_adjusted_coverage': [nuts_binomial_2_adjusted_coverage],
                    'advi_dep_adjusted_coverage': [advi_dep_adjusted_coverage],
-                   'advi_nodep_adjusted_coverage': [advi_nodep_adjusted_coverage],
+                   'advi_dep_2_adjusted_coverage': [advi_dep_2_adjusted_coverage],
                    'nuts_binomial_nmbe': [nuts_binomial_nmbe],
+                   'nuts_binomial_2_nmbe': [nuts_binomial_2_nmbe],
                    'advi_dep_nmbe': [advi_dep_nmbe],
-                   'advi_nodep_nmbe': [advi_nodep_nmbe],
+                   'advi_dep_2_nmbe': [advi_dep_2_nmbe],
                    'id': building_id}
 
     export_df = pd.DataFrame(data=export_data)

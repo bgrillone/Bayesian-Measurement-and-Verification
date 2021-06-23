@@ -213,7 +213,7 @@ norm_load_curves <- function(df,tz_local,time_column="t",value_column="v",temper
   
   if(perc_cons==T){load_curves <- normalize_perc_cons_day(df_spread)} else {load_curves <- df_spread}
   df_spread<- do.call(cbind,lapply(input_vars,function(x){eval(parse(text = x))}))
-  normalization <- normalize_znorm(df_spread, norm_specs)#normalize_range_int(df_spread, 0, 1, norm_specs)
+  normalization <- normalize_range_int(df_spread, 0, 1, norm_specs) #normalize_znorm(df_spread, norm_specs)
   df_spread <- normalization$norm
   
   # Generate the final spreated dataframe normalized
@@ -227,7 +227,7 @@ norm_load_curves <- function(df,tz_local,time_column="t",value_column="v",temper
               "input_vars"= input_vars, "days_complete"=days))
 }
 
-clustering_load_curves <- function(df, group, tz_local, time_column, value_column, temperature_column, perc_cons, n_dayparts, 
+clustering_load_curves_old <- function(df, group, tz_local, time_column, value_column, temperature_column, perc_cons, n_dayparts, 
                                    norm_specs=NULL, input_vars, k=NULL, title="", output_plots=F, centroids_plot_file=NULL, bic_plot_file=NULL, folder_plots="",
                                    latex_font=F, plot_n_centroids_per_row=9, minimum_days_for_a_cluster=10, filename_prefix=NULL, force_plain_cluster=F){
   
@@ -449,7 +449,7 @@ clustering_load_curves <- function(df, group, tz_local, time_column, value_colum
   return(results_all)
 }
 
-classifier_load_curves <- function(df, df_centroids, clustering_mod, clustering_mod_calendar, tz_local, time_column, value_column, temperature_column, 
+classifier_load_curves_old <- function(df, df_centroids, clustering_mod, clustering_mod_calendar, tz_local, time_column, value_column, temperature_column, 
                                    perc_cons, n_dayparts, filename_prefix, norm_specs=NULL, input_vars, plot_n_centroids_per_row=2, plot_file=NULL, folder_plots=""){
   
   # df = df
@@ -578,6 +578,298 @@ classifier_load_curves <- function(df, df_centroids, clustering_mod, clustering_
   
 }
 
+
+s <- function(x1, x2, alpha=1) {
+  exp(- alpha * norm(as.matrix(x1-x2), type="F"))
+}
+
+make.affinity <- function(S, n.neighboors=2) {
+  N <- length(S[,1])
+  
+  if (n.neighboors >= N) {  # fully connected
+    A <- S
+  } else {
+    A <- matrix(rep(0,N^2), ncol=N)
+    for(i in 1:N) { # for each line
+      # only connect to those points with larger similarity
+      best.similarities <- sort(S[i,], decreasing=TRUE)[1:n.neighboors]
+      for (s in best.similarities) {
+        j <- which(S[i,] == s)
+        A[i,j] <- S[i,j]
+        A[j,i] <- S[i,j] # to make an undirected graph, ie, the matrix becomes symmetric
+      }
+    }
+  }
+  A
+}
+
+make.similarity <- function(my.data, similarity) {
+  N <- nrow(my.data)
+  S <- matrix(rep(NA,N^2), ncol=N)
+  for(i in 1:N) {
+    for(j in 1:N) {
+      if (i!=j) {
+        S[i,j] <- similarity(my.data[i,], my.data[j,])
+      } else {
+        S[i,j] <- 0
+      }
+    }
+  }
+  S
+}
+
+clustering_load_curves <- function(df, tz_local, time_column, value_column, temperature_column, perc_cons, n_dayparts, 
+                                   norm_specs=NULL, input_vars, kmax=15, title="", output_plots=F, centroids_plot_file=NULL, folder_plots="",
+                                   plot_n_centroids_per_row=9, filename_prefix=NULL){
+  
+  
+  # df = ts_data
+  # tz_local = "Europe/Madrid"
+  # time_column = "time"
+  # value_column = "value"
+  # temperature_column = "temperature"
+  # perc_cons = T
+  # kmax=30
+  # n_dayparts = 24
+  # norm_specs = NULL
+  # input_vars = c("load_curves","daily_cons") # POSSIBLE INPUTS: c("load_curves", "days_weekend", "days_of_the_week", "daily_cons", "daily_temp"),
+  # centroids_plot_file = "clustering.pdf"
+  # plot_n_centroids_per_row=3
+  # filename_prefix=""
+  # folder_plots="clustering_plots/"
+  
+  input_clust <- norm_load_curves(df, tz_local, time_column, value_column, temperature_column, perc_cons, n_dayparts, norm_specs, input_vars)
+  
+  # Clustering algorithm
+  S <- make.similarity(input_clust$norm_df, s)
+  A <- make.affinity(S, 3)  # use 3 neighbors (includes self)
+  D <- diag(apply(A, 1, sum))
+  U <- D - A
+  evL <- eigen(U, symmetric=TRUE)
+  evSpectrum <- log(rev(evL$values)[1:kmax]+1e-12)
+  evSpectrum <- evSpectrum - lag(evSpectrum,1)
+  k <- which.max(evSpectrum) - 1
+  spectral_clust <- tryCatch({
+    specc(input_clust$norm_df, centers=k)
+  }, error=function(e){
+    1
+  })
+  
+  # Relation days - cluster
+  clustering_results <- data.frame(
+    "day" = input_clust$days_complete,
+    "s" = if(class(spectral_clust)[1]=="numeric"){spectral_clust} else {spectral_clust@.Data}
+  )
+  df_structural = merge(input_clust$raw_df, clustering_results, by="day")
+  
+  # Read the clustering centroids
+  if (class(spectral_clust)[1]=="numeric"){ 
+    clust_centroids <- mapply(function(x){mean(input_clust$norm_df[,x],na.rm=T)},1:ncol(input_clust$norm_df))
+    clust_centroids <- data.frame("s"=1,t(clust_centroids))
+  } else {
+    clust_centroids <- spectral_clust@centers
+    clust_centroids <- data.frame("s"=1:nrow(clust_centroids),clust_centroids)
+  }
+  
+  # Reformat the cluster integer numbers to factors of 2 digits
+  df_structural$s <- sprintf("%02i",as.integer(as.character(df_structural$s)))
+  clust_centroids$s <- sprintf("%02i",as.integer(as.character(clust_centroids$s)))
+  
+  # Compute the daily load curves centroids
+  df_centroids<-aggregate(df_structural$value,
+                          by=list(df_structural$dayhour,df_structural$s),FUN=function(x){mean(x,na.rm=T)})#quantile(x,0.60,na.rm=T)
+  colnames(df_centroids)<-c("dayhour","s","value")
+  df_centroids$s <- sprintf("%02i",as.integer(as.character(df_centroids$s)))
+  df_centroids <- df_centroids[order(df_centroids$s),]
+  df_centroids_spread <- spread(df_centroids,key = "dayhour",value = "value")
+  df_centroids_avg<-data.frame(
+    aggregate(df_structural$value, by=list(df_structural$dayhour), FUN=function(x){mean(x,na.rm=T)}),
+    aggregate(df_structural$value, by=list(df_structural$dayhour), FUN=function(x){quantile(x,0.05,na.rm=T)})$x,
+    aggregate(df_structural$value, by=list(df_structural$dayhour), FUN=function(x){quantile(x,0.95,na.rm=T)})$x
+  )
+  colnames(df_centroids_avg)<-c("dayhour","avg","lower","upper")
+  
+  # Plot
+  if (!is.null(centroids_plot_file)){
+    centroids_plot_file <- paste0(folder_plots,paste(filename_prefix, centroids_plot_file, sep="~"))
+    print(paste0("Clustering results saved in: ",centroids_plot_file))
+    pdf(centroids_plot_file,height = 6.5,width = 6.5)
+    print(ggplot(df_structural)+
+            geom_line(aes(x=as.numeric(substr(dayhour,1,2)),y=as.numeric(value),group=as.factor(day)),alpha=0.2)+
+            geom_line(data=df_centroids,aes(x=as.numeric(substr(dayhour,1,2)),y=as.numeric(value)),size=0.5,col='red')+
+            facet_wrap(~s,nrow=ceiling(length(unique(df_centroids$s))/plot_n_centroids_per_row))+
+            theme_bw()+theme(legend.position="none",axis.text=element_text(size=12),axis.text.x = element_text(angle=90),
+                             axis.title=element_text(size=16))+labs(x="Hour of the day", y="W/m²") +
+            theme(text= element_text(size=16))+
+            scale_x_continuous(
+              breaks = c(0, 12, 23),
+              label = c("00:00","12:00","23:00")
+            )  + scale_y_continuous(#limits=c(min(df_centroids$value),quantile(df_centroids$value,1,na.rm = T)+0.1),
+              labels =if(all.equal(sum(rowSums(apply(df_centroids_spread[,-1],1:2,as.numeric))),
+                                   nrow(df_centroids_spread),tolerance=0.01)==T){scales::percent}else{scales::number})#scale_y_log10(limits=c(min(df_centroids$value),max(df_centroids$value)+0.2),#c(0,quantile(df_centroids$value,0.99,na.rm = T)+0.1),
+          #                    labels = scales::percent)
+    )
+    dev.off()
+  }
+  
+  df_structural <- df_structural[order(df_structural[,"time"]),]
+  
+  # Simple calendar classification model by day week
+  df_structural[,"dayweek"] <- strftime(df_structural[,"time"],"%u")
+  df_structural[,"weekend"] <- ifelse(strftime(df_structural[,"time"],"%u") %in% c("6","7"),1,0)
+  if (class(spectral_clust)[1]=="numeric"){
+    mod_calendar <- unique(df_structural$s)
+  } else {
+    mod_calendar <- multinom(formula = as.factor(s) ~ 0 + as.factor(dayweek), 
+                             data = df_structural)
+  }
+  
+  # df_centroids_spread[,group] <- gr
+  # df_centroids_avg[,group] <- gr
+  
+  results_all <- list("df"=df_structural, "classified"=clustering_results, "clustering_centroids" = clust_centroids, 
+                      "centroids"=df_centroids_spread, "centroids_avg"=df_centroids_avg, 
+                      "norm_specs"=input_clust$norm_specs, "perc_cons"=input_clust$perc_cons,
+                      "n_dayparts"=input_clust$n_dayparts, "mod_calendar"=mod_calendar,
+                      "input_vars"= input_clust$input_vars)
+  
+  # names(results_all) <- names(df_s)
+  
+  return(results_all)
+}
+
+classifier_load_curves <- function(df, df_centroids, clustering_centroids, clustering_mod_calendar, tz_local, time_column, value_column, temperature_column, 
+                                   perc_cons, n_dayparts, filename_prefix, norm_specs=NULL, input_vars, plot_n_centroids_per_row=2, plot_file=NULL, folder_plots=""){
+  
+  # df = df
+  # df_centroids = clustering$centroids
+  # clustering_centroids = clustering$clustering_centroids
+  # clustering_mod_calendar = clustering$mod_calendar
+  # tz_local = "Europe/Madrid"
+  # # time_column = "time"
+  # # value_column = "value"
+  # # temperature_column = "temperature"
+  # time_column = "t"
+  # value_column = "total_electricity"
+  # temperature_column = "outdoor_temp"
+  # perc_cons = clustering$perc_cons
+  # n_dayparts = clustering$n_dayparts
+  # norm_specs = clustering$norm_specs
+  # input_vars = clustering$input_vars
+  # plot_n_centroids_per_row = 3
+  # plot_file = "classification.pdf"
+  # filename_prefix=""
+  # folder_plots="clustering_plots/"
+  
+  input_class <- norm_load_curves(df, tz_local, time_column, value_column, temperature_column, perc_cons, 
+                                  n_dayparts, norm_specs, input_vars,filter_na = F)
+  input_class$norm_df[is.na(input_class$norm_df)] <- 0
+  
+  # Wide format of the consumption dataframe
+  dt <- with_tz(df[,time_column],tz=tz_local)
+  df$hour <- hour(dt)
+  df$date <- as.Date(dt)
+  df <- df[!duplicated(df[,c("hour","date")]),]
+  df_consumption_wp <- spread(as.data.frame(df[c("date","hour",value_column)]),"hour",value_column)
+  
+  # Contracts
+  days <- df_consumption_wp[,"date"]
+  # df_consumption_wp <- df_consumption_wp[df_consumption_wp$date %in% days,]
+  df_consumption_wp <- df_consumption_wp[,-1]
+  for(dayh in as.character(0:23)[!(as.character(0:23) %in% colnames(df_consumption_wp))]){
+    df_consumption_wp[,dayh] <- 0
+  }
+  
+  df_consumption_wp <- df_consumption_wp[,order(as.numeric(colnames(df_consumption_wp)))]
+  
+  # Classify across all centroids (the classification is done by calculating the cross distance matrix between the centroids data frame and the consumption data frame)
+  dist_shapes <- t(proxy::dist(apply(as.matrix(df_centroids[,!(colnames(df_centroids) %in% "s")]),1:2,as.numeric),
+                               as.matrix(df_consumption_wp)))
+  
+  # Classify across all centroids (the classification is done by calculating the cross distance matrix between the centroids data frame and the consumption data frame)
+  dist_clust_shapes <- t(proxy::dist(apply(as.matrix(clustering_centroids[,!(colnames(clustering_centroids) %in% "s")]),1:2,as.numeric),
+                                     as.matrix(input_class$norm_df)))
+  
+  predict_classif_clustering_centroids <- data.frame(
+    "days" = input_class$days_complete,
+    "classification_clustering_centroids" = 
+      factor(sprintf("%02i",dist_clust_shapes %>% apply(1, function(x) {ifelse(sum(is.na(x))>1, NA, order(x)[1])})),
+             levels=df_centroids$s)
+  )
+  predict_classif_load_curve <- data.frame(
+    "days" = days,
+    "classification_load_curve" = 
+      factor(sprintf("%02i",dist_shapes %>% apply(1, function(x) {ifelse(sum(is.na(x))>1, NA, order(x)[1])})),
+             levels=df_centroids$s)
+  )
+  if(!is.null(clustering_mod_calendar)){
+    if(class(clustering_mod_calendar)[1]=="character"){
+      predict_classif_calendar <- clustering_mod_calendar
+    } else {
+      predict_classif_calendar <- predict(clustering_mod_calendar,
+                                          data.frame(
+                                            "dayweek"=strftime(input_class$days_complete,"%u")
+                                          ))
+    }
+  } else {
+    predict_classif_calendar <- predict_classif_load_curve$classification_load_curve
+  }
+  predict_multilabelled_model <- data.frame(
+    "days" = input_class$days_complete,
+    "prediction" = predict_classif_calendar
+  )
+  
+  shapes_1 <- merge(predict_classif_load_curve, predict_classif_clustering_centroids, by="days", all.x=T)
+  shapes_1 <- merge(shapes_1, predict_multilabelled_model, by="days", all.x=T)
+  shapes_1$final <- ifelse(!is.na(shapes_1$classification_clustering_centroids),
+                           shapes_1$classification_clustering_centroids,
+                           ifelse(!is.na(shapes_1$classification_load_curve), 
+                                  shapes_1$classification_load_curve,
+                                  shapes_1$prediction))
+  shapes_1 <- shapes_1$final
+  
+  dist_shapes <- data.frame(matrix(dist_shapes,ncol=ncol(dist_shapes)))
+  colnames(dist_shapes) <- paste0("dist",1:ncol(dist_shapes))
+  df_shapes <- data.frame(
+    "day" = as.Date(days,format="%Y-%m-%d",
+                    tz=tz_local),
+    "shape1" = as.factor(as.character(shapes_1)))
+  df_consumption <- df
+  
+  df_consumption$s <- df_shapes$shape1[match(df_consumption$date,df_shapes$day)]
+  df_consumption[,"value"] <- df_consumption[,value_column]
+  df_centroids_m <- reshape2::melt(df_centroids,"s")
+  colnames(df_centroids_m) <- c("s","dayhour","value")
+  df_consumption_test <- df_consumption[ !is.na(df_consumption$s) , ]
+  df_consumption_test$s <- df_consumption_test$s
+  
+  if(!is.null(plot_file)){
+    plot_file <- paste0(folder_plots,paste(filename_prefix, "classification.pdf",sep="~"))
+    df_consumption_for_plot <- data.frame(
+      "hour"=df_consumption_test[,"hour"],
+      "date"=df_consumption_test[,"date"],
+      "value"=df_consumption_test[,value_column],
+      "s"=sprintf("%02i",df_consumption_test[,"s"])
+    )
+    p <- ggplot(df_consumption_for_plot)+
+      geom_line(aes(x=as.numeric(substr(hour,1,2)),y=as.numeric(value),group=as.factor(date)),alpha=0.2, col = 'black') +
+      geom_line(data=df_centroids_m,aes(x=as.numeric(substr(dayhour,1,2)),y=as.numeric(value)),size=0.5,col='red') +
+      facet_wrap(~s,nrow=ceiling(length(unique(df_centroids_m$s))/plot_n_centroids_per_row)) +
+      theme_bw() + theme(legend.position="none",axis.text=element_text(size=12),axis.text.x = element_text(angle=90),
+                         axis.title=element_text(size=16)) +
+      labs(x="Hour of the day", y="W/m²") +
+      theme(text= element_text(size=16))+
+      scale_x_continuous(
+        breaks = c(0, 12, 23),
+        label = c("00:00","12:00","23:00")
+      )
+    ggsave(plot_file,p,height = 6.5,width = 6.5)
+  }
+  results_all <- df_consumption_test
+  
+  return(results_all)
+  
+}
 
 
 ## CHARACTERIZER FUNCTIONS ----
