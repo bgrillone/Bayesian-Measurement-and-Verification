@@ -865,7 +865,7 @@ def bayesian_model_comparison_whole_year (df, building_id):
     return export_df
 
 def bayesian_model_comparison_model_spec (df, building_id):
-    #df = pd.read_csv("/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Crow_education_Omer_preprocess.csv")
+    #df = pd.read_csv("/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Crow_education_Winston_preprocess.csv")
     #df = pd.read_csv("/root/benedetto/results/buildings/Fox_education_Gloria_preprocess.csv")
     # Preprocess
     df["log_v"] = log_electricity = np.log(df["total_electricity"]).values
