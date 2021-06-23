@@ -24,7 +24,6 @@ id = 'multilevel_hourly'
 df$t <- as.POSIXct(df$t,tz="Europe/Madrid", format = "%Y-%m-%d %H:%M:%S")
 df <- df[complete.cases(df$t),]
 print(getwd())
-dir.create("clustering_plots")
 clustering <- clustering_load_curves(
   df = df[df$t<as.POSIXct("2017-01-01"),],
   tz_local = "Europe/Madrid",
@@ -79,7 +78,7 @@ colnames(classification_from_clustering) <- c("date","s")
 classification_from_clustering$s <- as.numeric(classification_from_clustering$s)
 classification <- rbind(classification_from_clustering[is.finite(classification_from_clustering$s),],classification)
 classification <- classification[!duplicated(classification[,c("date")]),]
-classification$s <- sprintf("%02i",classification$s)
+#classification$s <- sprintf("%02i",classification$s)
 df_centroids_count <- as.data.frame(table(classification$s))
 colnames(df_centroids_count) <- c("cluster","days")
 
