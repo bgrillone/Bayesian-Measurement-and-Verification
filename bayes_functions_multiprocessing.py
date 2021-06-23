@@ -895,10 +895,10 @@ def bayesian_model_comparison_model_spec (df, building_id):
     unique_dayparts = dayparts_train.unique()
     unique_weekdays = weekdays_train.unique()
     outdoor_temp_train = train_df.outdoor_temp
-    outdoor_temp_c_train = train_df.outdoor_temp_c
-    outdoor_temp_h_train = train_df.outdoor_temp_h
-    outdoor_temp_lp_c_train = train_df.outdoor_temp_lp_c
-    outdoor_temp_lp_h_train = train_df.outdoor_temp_lp_h
+    #outdoor_temp_c_train = train_df.outdoor_temp_c
+    #outdoor_temp_h_train = train_df.outdoor_temp_h
+    #outdoor_temp_lp_c_train = train_df.outdoor_temp_lp_c
+    #outdoor_temp_lp_h_train = train_df.outdoor_temp_lp_h
     daypart_fs_sin_1_train = train_df.daypart_fs_sin_1
     daypart_fs_sin_2_train = train_df.daypart_fs_sin_2
     daypart_fs_sin_3_train = train_df.daypart_fs_sin_3
@@ -911,10 +911,10 @@ def bayesian_model_comparison_model_spec (df, building_id):
     dayparts_test = test_df.daypart
     weekdays_test = test_df.weekday
     outdoor_temp_test = test_df.outdoor_temp
-    outdoor_temp_c_test = test_df.outdoor_temp_c
-    outdoor_temp_h_test = test_df.outdoor_temp_h
-    outdoor_temp_lp_c_test = test_df.outdoor_temp_lp_c
-    outdoor_temp_lp_h_test = test_df.outdoor_temp_lp_h
+    #outdoor_temp_c_test = test_df.outdoor_temp_c
+    #outdoor_temp_h_test = test_df.outdoor_temp_h
+    #outdoor_temp_lp_c_test = test_df.outdoor_temp_lp_c
+    #outdoor_temp_lp_h_test = test_df.outdoor_temp_lp_h
     daypart_fs_sin_1_test = test_df.daypart_fs_sin_1
     daypart_fs_sin_2_test = test_df.daypart_fs_sin_2
     daypart_fs_sin_3_test = test_df.daypart_fs_sin_3
@@ -943,10 +943,10 @@ def bayesian_model_comparison_model_spec (df, building_id):
         fs_cos_2 = pm.Data("fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
         fs_cos_3 = pm.Data("fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
 
-        cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
-        heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
-        cooling_temp_lp = pm.Data("cooling_temp_lp", outdoor_temp_lp_c_train, dims="obs_id")
-        heating_temp_lp = pm.Data("heating_temp_lp", outdoor_temp_lp_h_train, dims="obs_id")
+        #cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
+        #heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
+        #cooling_temp_lp = pm.Data("cooling_temp_lp", outdoor_temp_lp_c_train, dims="obs_id")
+        #heating_temp_lp = pm.Data("heating_temp_lp", outdoor_temp_lp_h_train, dims="obs_id")
         outdoor_temp = pm.Data("outdoor_temp", outdoor_temp_train, dims="obs_id")
 
         # Hyperpriors:
@@ -1028,10 +1028,10 @@ def bayesian_model_comparison_model_spec (df, building_id):
                      "fs_cos_1": daypart_fs_cos_1_test,
                      "fs_cos_2": daypart_fs_cos_2_test,
                      "fs_cos_3": daypart_fs_cos_3_test,
-                     "cooling_temp": outdoor_temp_c_test,
-                     "heating_temp": outdoor_temp_h_test,
-                     "cooling_temp_lp": outdoor_temp_lp_c_test,
-                     "heating_temp_lp": outdoor_temp_lp_h_test,
+                     #"cooling_temp": outdoor_temp_c_test,
+                     #"heating_temp": outdoor_temp_h_test,
+                     #"cooling_temp_lp": outdoor_temp_lp_c_test,
+                     #"heating_temp_lp": outdoor_temp_lp_h_test,
                      "outdoor_temp": outdoor_temp_test
                      })
 
@@ -1130,10 +1130,10 @@ def bayesian_model_comparison_model_spec (df, building_id):
         fs_cos_2 = pm.Data("fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
         fs_cos_3 = pm.Data("fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
 
-        cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
-        heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
-        cooling_temp_lp = pm.Data("cooling_temp_lp", outdoor_temp_lp_c_train, dims="obs_id")
-        heating_temp_lp = pm.Data("heating_temp_lp", outdoor_temp_lp_h_train, dims="obs_id")
+        #cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
+        #heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
+        #cooling_temp_lp = pm.Data("cooling_temp_lp", outdoor_temp_lp_c_train, dims="obs_id")
+        #heating_temp_lp = pm.Data("heating_temp_lp", outdoor_temp_lp_h_train, dims="obs_id")
         outdoor_temp = pm.Data("outdoor_temp", outdoor_temp_train, dims="obs_id")
 
         # Hyperpriors:
@@ -1215,10 +1215,10 @@ def bayesian_model_comparison_model_spec (df, building_id):
                      "fs_cos_1": daypart_fs_cos_1_test,
                      "fs_cos_2": daypart_fs_cos_2_test,
                      "fs_cos_3": daypart_fs_cos_3_test,
-                     "cooling_temp": outdoor_temp_c_test,
-                     "heating_temp": outdoor_temp_h_test,
-                     "cooling_temp_lp": outdoor_temp_lp_c_test,
-                     "heating_temp_lp": outdoor_temp_lp_h_test,
+                     #"cooling_temp": outdoor_temp_c_test,
+                     #"heating_temp": outdoor_temp_h_test,
+                     #"cooling_temp_lp": outdoor_temp_lp_c_test,
+                     #"heating_temp_lp": outdoor_temp_lp_h_test,
                      "outdoor_temp": outdoor_temp_test
                      })
 
@@ -1318,10 +1318,10 @@ def bayesian_model_comparison_model_spec (df, building_id):
         fs_cos_2 = pm.Data("fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
         fs_cos_3 = pm.Data("fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
 
-        cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
-        heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
-        cooling_temp_lp = pm.Data("cooling_temp_lp", outdoor_temp_lp_c_train, dims="obs_id")
-        heating_temp_lp = pm.Data("heating_temp_lp", outdoor_temp_lp_h_train, dims="obs_id")
+        #cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
+        #heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
+        #cooling_temp_lp = pm.Data("cooling_temp_lp", outdoor_temp_lp_c_train, dims="obs_id")
+        #heating_temp_lp = pm.Data("heating_temp_lp", outdoor_temp_lp_h_train, dims="obs_id")
         outdoor_temp = pm.Data("outdoor_temp", outdoor_temp_train, dims="obs_id")
 
         # Hyperpriors:
@@ -1400,10 +1400,10 @@ def bayesian_model_comparison_model_spec (df, building_id):
                      "fs_cos_1": daypart_fs_cos_1_test,
                      "fs_cos_2": daypart_fs_cos_2_test,
                      "fs_cos_3": daypart_fs_cos_3_test,
-                     "cooling_temp": outdoor_temp_c_test,
-                     "heating_temp": outdoor_temp_h_test,
-                     "cooling_temp_lp": outdoor_temp_lp_c_test,
-                     "heating_temp_lp": outdoor_temp_lp_h_test,
+                     #"cooling_temp": outdoor_temp_c_test,
+                     #"heating_temp": outdoor_temp_h_test,
+                     #"cooling_temp_lp": outdoor_temp_lp_c_test,
+                     #"heating_temp_lp": outdoor_temp_lp_h_test,
                      "outdoor_temp": outdoor_temp_test
                      })
 
@@ -1481,10 +1481,10 @@ def bayesian_model_comparison_model_spec (df, building_id):
         fs_cos_2 = pm.Data("fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
         fs_cos_3 = pm.Data("fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
 
-        cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
-        heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
-        cooling_temp_lp = pm.Data("cooling_temp_lp", outdoor_temp_lp_c_train, dims="obs_id")
-        heating_temp_lp = pm.Data("heating_temp_lp", outdoor_temp_lp_h_train, dims="obs_id")
+        #cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
+        #heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
+        #cooling_temp_lp = pm.Data("cooling_temp_lp", outdoor_temp_lp_c_train, dims="obs_id")
+        #heating_temp_lp = pm.Data("heating_temp_lp", outdoor_temp_lp_h_train, dims="obs_id")
         outdoor_temp = pm.Data("outdoor_temp", outdoor_temp_train, dims="obs_id")
 
         # Hyperpriors:
@@ -1563,10 +1563,10 @@ def bayesian_model_comparison_model_spec (df, building_id):
                      "fs_cos_1": daypart_fs_cos_1_test,
                      "fs_cos_2": daypart_fs_cos_2_test,
                      "fs_cos_3": daypart_fs_cos_3_test,
-                     "cooling_temp": outdoor_temp_c_test,
-                     "heating_temp": outdoor_temp_h_test,
-                     "cooling_temp_lp": outdoor_temp_lp_c_test,
-                     "heating_temp_lp": outdoor_temp_lp_h_test,
+                     #"cooling_temp": outdoor_temp_c_test,
+                     #"heating_temp": outdoor_temp_h_test,
+                     #"cooling_temp_lp": outdoor_temp_lp_c_test,
+                     #"heating_temp_lp": outdoor_temp_lp_h_test,
                      "outdoor_temp": outdoor_temp_test
                      })
 
