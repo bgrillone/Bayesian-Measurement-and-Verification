@@ -13,12 +13,13 @@ library(plotly)
 library(lubridate)
 library(kernlab)
 library(igraph)
+library(nnet)
 setwd("/root/benedetto/Bayesian-Measurement-and-Verification")
 source("preprocessing/functions_updated.R")
 
 a <- commandArgs(trailingOnly = T)
 df <- read.csv(paste0("/root/benedetto/results/buildings/", a[1],".csv"), stringsAsFactors = F)
-#df <- read.csv("/Users/beegroup/Downloads/Fox_education_Gloria.csv", stringsAsFactors = F)
+#df <- read.csv("/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Crow_education_Keisha.csv", stringsAsFactors = F)
 
 id = 'multilevel_hourly'
 df$t <- as.POSIXct(df$t,tz="Europe/Madrid", format = "%Y-%m-%d %H:%M:%S")
@@ -35,7 +36,7 @@ clustering <- clustering_load_curves(
   n_dayparts = 24,
   norm_specs = NULL,
   input_vars = c("load_curves"), # POSSIBLE INPUTS: c("load_curves", "days_weekend", "days_of_the_week", "daily_cons", "daily_temp"),
-  centroids_plot_file = paste0(a[1], "_clustering.pdf"),
+  centroids_plot_file = NULL,#paste0(a[1], "_clustering.pdf"),
   plot_n_centroids_per_row=3,
   filename_prefix="",
   folder_plots="/root/benedetto/results/plots/clustering_plots/"
@@ -62,7 +63,7 @@ classification <- classifier_load_curves(
   input_vars = clustering$input_vars,
   plot_n_centroids_per_row = 3,
   # plot_file = NULL,
-  plot_file = paste0(a[1], "_classification.pdf"),
+  plot_file = NULL,#paste0(a[1], "_classification.pdf"),
   filename_prefix="",
   folder_plots= "/root/benedetto/results/plots/clustering_plots/"
 )
@@ -78,7 +79,7 @@ colnames(classification_from_clustering) <- c("date","s")
 classification_from_clustering$s <- as.numeric(classification_from_clustering$s)
 classification <- rbind(classification_from_clustering[is.finite(classification_from_clustering$s),],classification)
 classification <- classification[!duplicated(classification[,c("date")]),]
-#classification$s <- sprintf("%02i",classification$s)
+classification$s <- sprintf("%02i",as.integer(classification$s))
 df_centroids_count <- as.data.frame(table(classification$s))
 colnames(df_centroids_count) <- c("cluster","days")
 
