@@ -36,7 +36,7 @@ clustering <- clustering_load_curves(
   kmax=30,
   n_dayparts = 24,
   norm_specs = NULL,
-  input_vars = c("load_curves", "days_weekend"), # POSSIBLE INPUTS: c("load_curves", "days_weekend", "days_of_the_week", "daily_cons", "daily_temp"),
+  input_vars = c("load_curves", "days_weekend", "day_of_the_year"), # POSSIBLE INPUTS: c("load_curves", "days_weekend", "days_of_the_week", "daily_cons", "daily_temp"),
   centroids_plot_file = "clustering.pdf", #paste0(a[1], "_clustering.pdf"),
   plot_n_centroids_per_row=3,
   filename_prefix="",
@@ -105,7 +105,7 @@ df_export <- df %>% select(t, total_electricity, outdoor_temp, s, daypart,
 df_export <- df_export[complete.cases(df_export),]
 
 write.csv(df_export,paste0("/root/benedetto/results/buildings/", a[1],"_preprocess.csv"), row.names = F)
-#write.csv(df_export, "/Users/beegroup/Downloads/Fox_education_Ollie_preprocess.csv", row.names = F)
+write.csv(df_export, "/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Fox_education_Ollie_preprocess.csv", row.names = F)
 
 
 # df$all <- "all"
