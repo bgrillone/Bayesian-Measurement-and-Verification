@@ -968,13 +968,13 @@ def bayesian_model_comparison_model_spec (df, building_id):
         dp_fs_cos_2 = pm.Data("dp_fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
         dp_fs_cos_3 = pm.Data("dp_fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
 
-        yp_fs_sin_1 = pm.Data("yp_fs_sin_1", yearpart_fs_sin_1_train, dims="obs_id")
-        yp_fs_sin_2 = pm.Data("yp_fs_sin_2", yearpart_fs_sin_2_train, dims="obs_id")
-        yp_fs_sin_3 = pm.Data("yp_fs_sin_3", yearpart_fs_sin_3_train, dims="obs_id")
-
-        yp_fs_cos_1 = pm.Data("yp_fs_cos_1", yearpart_fs_cos_1_train, dims="obs_id")
-        yp_fs_cos_2 = pm.Data("yp_fs_cos_2", yearpart_fs_cos_2_train, dims="obs_id")
-        yp_fs_cos_3 = pm.Data("yp_fs_cos_3", yearpart_fs_cos_3_train, dims="obs_id")
+        # yp_fs_sin_1 = pm.Data("yp_fs_sin_1", yearpart_fs_sin_1_train, dims="obs_id")
+        # yp_fs_sin_2 = pm.Data("yp_fs_sin_2", yearpart_fs_sin_2_train, dims="obs_id")
+        # yp_fs_sin_3 = pm.Data("yp_fs_sin_3", yearpart_fs_sin_3_train, dims="obs_id")
+        #
+        # yp_fs_cos_1 = pm.Data("yp_fs_cos_1", yearpart_fs_cos_1_train, dims="obs_id")
+        # yp_fs_cos_2 = pm.Data("yp_fs_cos_2", yearpart_fs_cos_2_train, dims="obs_id")
+        # yp_fs_cos_3 = pm.Data("yp_fs_cos_3", yearpart_fs_cos_3_train, dims="obs_id")
 
         #cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
         #heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
@@ -1071,12 +1071,12 @@ def bayesian_model_comparison_model_spec (df, building_id):
                      "dp_fs_cos_1": daypart_fs_cos_1_test,
                      "dp_fs_cos_2": daypart_fs_cos_2_test,
                      "dp_fs_cos_3": daypart_fs_cos_3_test,
-                     "yp_fs_sin_1": yearpart_fs_sin_1_test,
-                     "yp_fs_sin_2": yearpart_fs_sin_2_test,
-                     "yp_fs_sin_3": yearpart_fs_sin_3_test,
-                     "yp_fs_cos_1": yearpart_fs_cos_1_test,
-                     "yp_fs_cos_2": yearpart_fs_cos_2_test,
-                     "yp_fs_cos_3": yearpart_fs_cos_3_test,
+                     # "yp_fs_sin_1": yearpart_fs_sin_1_test,
+                     # "yp_fs_sin_2": yearpart_fs_sin_2_test,
+                     # "yp_fs_sin_3": yearpart_fs_sin_3_test,
+                     # "yp_fs_cos_1": yearpart_fs_cos_1_test,
+                     # "yp_fs_cos_2": yearpart_fs_cos_2_test,
+                     # "yp_fs_cos_3": yearpart_fs_cos_3_test,
                      #"cooling_temp": outdoor_temp_c_test,
                      #"heating_temp": outdoor_temp_h_test,
                      #"cooling_temp_lp": outdoor_temp_lp_c_test,

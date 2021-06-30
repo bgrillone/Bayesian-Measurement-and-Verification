@@ -93,7 +93,7 @@ df$s<-as.factor(df$s)
 
 # Add Fourier terms
 df <- add_fs_daypart(df, 't')
-df <- add_fs_yearpart(df, 't')
+#df <- add_fs_yearpart(df, 't')
 
 # Add daypart and weekday
 hours_of_each_daypart = 4
