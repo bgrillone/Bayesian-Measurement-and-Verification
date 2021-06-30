@@ -209,6 +209,7 @@ norm_load_curves <- function(df,tz_local,time_column="t",value_column="v",temper
   daily_temp <- df_spread[,"temperature"]
   days_of_the_week <- as.numeric(strftime(days,"%u"))
   days_weekend <- ifelse(days_of_the_week %in% c(6,7),1,0)
+  day_of_the_year <- month(days)
   df_spread<-df_spread[,-which(colnames(df_spread) %in% c("value","day","temperature"))]
   
   if(perc_cons==T){load_curves <- normalize_perc_cons_day(df_spread)} else {load_curves <- df_spread}
@@ -1675,7 +1676,7 @@ add_fs_daypart_holidays <- function(df, daypart_column, hours_of_each_daypart){
   df <- cbind(df,df_fs) 
 }
 
-add_fs_yearpart_holidays <- function(df, time_column="time", yearhour_column=NULL){
+add_fs_yearpart <- function(df, time_column="time", yearhour_column=NULL){
   if(!is.null(yearhour_column)){
     df$yearhour <- df[,yearhour_column]
   } else {
@@ -1683,7 +1684,7 @@ add_fs_yearpart_holidays <- function(df, time_column="time", yearhour_column=NUL
   }
   df_fs <- do.call(cbind,
                    fs(df$yearhour/(24*365),
-                      nharmonics = 2, odd = F, prefix=paste0("yearpart_holidays_fs_"))) * df$holidays
+                      nharmonics = 3, odd = F, prefix=paste0("yearpart_fs_")))
   df <- cbind(df,df_fs)
 }
 
