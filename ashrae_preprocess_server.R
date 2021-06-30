@@ -15,12 +15,14 @@ library(kernlab)
 library(igraph)
 library(nnet)
 # setwd("/Users/beegroup/Github/Bayes-M&V/")
+#setwd("/Users/benedetto/Github/Bayesian-Measurement-and-Verification//")
 setwd("/root/benedetto/Bayesian-Measurement-and-Verification")
 source("preprocessing/functions_updated.R")
 
 a <- commandArgs(trailingOnly = T)
 df <- read.csv(paste0("/root/benedetto/results/buildings/", a[1],".csv"), stringsAsFactors = F)
 #df <- read.csv("/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Fox_education_Ollie.csv", stringsAsFactors = F)
+#df <- read.csv("/Users/benedetto/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Rat_education_Mona.csv", stringsAsFactors = F)
 
 id = 'multilevel_hourly'
 df$t <- as.POSIXct(df$t,tz="Europe/Madrid", format = "%Y-%m-%d %H:%M:%S")
@@ -37,10 +39,10 @@ clustering <- clustering_load_curves(
   n_dayparts = 24,
   norm_specs = NULL,
   input_vars = c("load_curves", "days_weekend", "day_of_the_year"), # POSSIBLE INPUTS: c("load_curves", "days_weekend", "days_of_the_week", "daily_cons", "daily_temp"),
-  centroids_plot_file = "clustering.pdf", #paste0(a[1], "_clustering.pdf"),
+  centroids_plot_file = paste0(a[1], "_clustering.pdf"),
   plot_n_centroids_per_row=3,
   filename_prefix="",
-  folder_plots= "" #/root/benedetto/results/plots/clustering_plots/"
+  folder_plots= "/root/benedetto/results/plots/clustering_plots/"
 )
 
 df_centroids <- reshape2::melt(clustering$centroids,id_vars=c("s"))
@@ -66,7 +68,7 @@ classification <- classifier_load_curves(
   plot_file = NULL,
   # plot_file = paste0(a[1], "_classification.pdf"),
   filename_prefix="",
-  folder_plots= "" #"/root/benedetto/results/plots/clustering_plots/"
+  folder_plots= "/root/benedetto/results/plots/clustering_plots/"
 )
 
 df_centroids <- reshape2::melt(df_centroids,id_vars=c("s"))
@@ -105,8 +107,8 @@ df_export <- df %>% select(t, total_electricity, outdoor_temp, s, daypart,
 df_export <- df_export[complete.cases(df_export),]
 
 write.csv(df_export,paste0("/root/benedetto/results/buildings/", a[1],"_preprocess.csv"), row.names = F)
-write.csv(df_export, "/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Fox_education_Ollie_preprocess.csv", row.names = F)
-
+#write.csv(df_export, "/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Fox_education_Ollie_preprocess.csv", row.names = F)
+#write.csv(df_export, "/Users/benedetto/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Rat_education_Mona_preprocess.csv", row.names = F)
 
 # df$all <- "all"
 # df$GHI <- 0
