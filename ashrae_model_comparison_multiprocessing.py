@@ -8,8 +8,8 @@ bdg_weather = pd.read_csv("/root/benedetto/data/bdg/weather.csv")
 
 # Run one building subset at the time
 
-#subset_df = bdg_df
-subset_df = bdg_df.loc[:, bdg_df.columns.str.startswith(('Fox', 'timestamp'))]
+subset_df = bdg_df
+#subset_df = bdg_df.loc[:, bdg_df.columns.str.startswith(('Fox', 'timestamp'))]
 
 buildings = []
 
