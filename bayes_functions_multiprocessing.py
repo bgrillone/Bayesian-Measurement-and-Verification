@@ -162,7 +162,6 @@ def bayesian_model_comparison_test_1 (df, building_id):
     az.plot_trace(model_1_trace['dep_c'][None, :, :])
     plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_c_ad.png')
 
-    plt.show()
     # Calculate predictions and HDI
 
     model_1_predictions = np.exp(model_1_posterior['y'].mean(0))
@@ -200,7 +199,7 @@ def bayesian_model_comparison_test_1 (df, building_id):
                'lower_bound': model_1_lower_bound,
                'higher_bound': model_1_higher_bound}
 
-    mod_1_results = pd.DataFrame(data=ad_data)
+    mod_1_results = pd.DataFrame(data=mod_1_data)
     mod_1_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_mod_1.csv", index=False)
 
     export_data = {'mod_1_cvrmse': [model_1_cvrmse],
