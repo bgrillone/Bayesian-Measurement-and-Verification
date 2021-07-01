@@ -11,6 +11,206 @@ import os
 import matplotlib.pyplot as plt
 from bokeh.plotting import figure, output_file, show
 
+def bayesian_model_comparison_test_1 (df, building_id):
+    #df = pd.read_csv("/root/benedetto/results/buildings/Crow_education_Keisha_preprocess.csv")
+    #df = pd.read_csv("/Users/benedetto/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Fox_education_Ollie_preprocess.csv")
+    # Preprocess
+    df["log_v"] = log_electricity = np.log(df["total_electricity"]).values
+
+    # Create local variables (assign daypart, cluster and weekday values need to start from 0)
+    # clusters are use profile categories, heat_clusters and cool_clusters indicate days having similar
+    # temperature dependence (likely to modify this in the new version of the preprocessing)
+
+    df.t = pd.to_datetime(pd.Series(df.t))
+    df.s = df.s - 1
+
+    # Create training and test set (for the ashrae data training is 2016, test is 2017)
+    train_df = df.loc[df["t"] <= pd.to_datetime("2017-01-01")]
+    test_df = df.loc[df["t"] > pd.to_datetime("2017-01-01")]
+
+    # Define Training variables
+    total_electricity_train = train_df.total_electricity.values
+    log_electricity_train = train_df['log_v']
+    clusters_train = train_df.s
+    unique_clusters = clusters_train.unique()
+    dayparts_train = train_df.daypart
+    weekdays_train = train_df.weekday
+    unique_dayparts = dayparts_train.unique()
+    unique_weekdays = weekdays_train.unique()
+    outdoor_temp_train = train_df.outdoor_temp
+    daypart_fs_sin_1_train = train_df.daypart_fs_sin_1
+    daypart_fs_sin_2_train = train_df.daypart_fs_sin_2
+    daypart_fs_sin_3_train = train_df.daypart_fs_sin_3
+    daypart_fs_cos_1_train = train_df.daypart_fs_cos_1
+    daypart_fs_cos_2_train = train_df.daypart_fs_cos_2
+    daypart_fs_cos_3_train = train_df.daypart_fs_cos_3
+
+    # Define test variables
+    clusters_test = test_df.s
+    dayparts_test = test_df.daypart
+    weekdays_test = test_df.weekday
+    outdoor_temp_test = test_df.outdoor_temp
+    daypart_fs_sin_1_test = test_df.daypart_fs_sin_1
+    daypart_fs_sin_2_test = test_df.daypart_fs_sin_2
+    daypart_fs_sin_3_test = test_df.daypart_fs_sin_3
+    daypart_fs_cos_1_test = test_df.daypart_fs_cos_1
+    daypart_fs_cos_2_test = test_df.daypart_fs_cos_2
+    daypart_fs_cos_3_test = test_df.daypart_fs_cos_3
+
+    # create coords for pymc3
+    coords = {"obs_id": np.arange(total_electricity_train.size)}
+    coords["profile_cluster"] = unique_clusters
+    coords["daypart"] = unique_dayparts
+
+    # Model 1 ADVI dep
+
+    with pm.Model(coords=coords) as model_1:
+        profile_cluster_idx = pm.Data("profile_cluster_idx", clusters_train, dims="obs_id")
+        daypart = pm.Data("daypart", dayparts_train, dims="obs_id")
+        weekday = pm.Data("weekday", weekdays_train, dims="obs_id")
+
+        dp_fs_sin_1 = pm.Data("dp_fs_sin_1", daypart_fs_sin_1_train, dims="obs_id")
+        dp_fs_sin_2 = pm.Data("dp_fs_sin_2", daypart_fs_sin_2_train, dims="obs_id")
+        dp_fs_sin_3 = pm.Data("dp_fs_sin_3", daypart_fs_sin_3_train, dims="obs_id")
+
+        dp_fs_cos_1 = pm.Data("dp_fs_cos_1", daypart_fs_cos_1_train, dims="obs_id")
+        dp_fs_cos_2 = pm.Data("dp_fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
+        dp_fs_cos_3 = pm.Data("dp_fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
+
+        outdoor_temp = pm.Data("outdoor_temp", outdoor_temp_train, dims="obs_id")
+
+        # Temperature coefficients:
+
+        btc = pm.Uniform("btc", lower = -5, upper = 5, dims="daypart")
+        bth = pm.Uniform("bth", lower = -5, upper = 5, dims="daypart")
+
+        # Intercept
+        a_cluster = pm.Uniform("a_cluster", lower = -100, upper = 100, dims=("profile_cluster"))
+
+        # Fourier slopes:
+        bsd1 = pm.Uniform("bsd1", lower = -5, upper = 5, dims=("profile_cluster"))
+        bsd2 = pm.Uniform("bsd2", lower = -5, upper = 5, dims=("profile_cluster"))
+        bsd3 = pm.Uniform("bsd3", lower = -5, upper = 5, dims=("profile_cluster"))
+
+        bcd1 = pm.Uniform("bcd1", lower = -5, upper = 5, dims=("profile_cluster"))
+        bcd2 = pm.Uniform("bcd2", lower = -5, upper = 5, dims=("profile_cluster"))
+        bcd3 = pm.Uniform("bcd3", lower = -5, upper = 5, dims=("profile_cluster"))
+
+        # Balance temperatures
+        tbal_h = pm.Uniform("tbal_h", lower = 8, upper = 30)
+        tbal_c = pm.Uniform("tbal_c", lower = 8, upper = 30)
+
+        # Dependence
+        dep_h = pm.Uniform("dep_h", lower=0, upper=1, dims="profile_cluster")
+        dep_c = pm.Uniform("dep_c", lower=0, upper=1, dims="profile_cluster")
+
+        # Expected value per county:
+        mu = a_cluster[profile_cluster_idx] + bsd1[profile_cluster_idx] * dp_fs_sin_1 + \
+             bsd2[profile_cluster_idx] * dp_fs_sin_2 + bsd3[profile_cluster_idx] * dp_fs_sin_3 + \
+             bcd1[profile_cluster_idx] * dp_fs_cos_1 + bcd2[profile_cluster_idx] * dp_fs_cos_2 + \
+             bcd3[profile_cluster_idx] * dp_fs_cos_3 + \
+             btc[daypart] * (outdoor_temp - tbal_c) * ((outdoor_temp - tbal_c) > 0) * (
+                     dep_c[profile_cluster_idx] > 0.5) + \
+             bth[daypart] * (tbal_h - outdoor_temp) * ((tbal_h - outdoor_temp) > 0) * (
+                     dep_h[profile_cluster_idx] > 0.5)
+
+        # Model error:
+        sigma = pm.Exponential("sigma", 1.0)
+
+        # Likelihood
+        y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity_train, dims="obs_id")
+
+        # Fitting
+    with model_1:
+        approx_dep = pm.fit(n=50000,
+                        method='fullrank_advi',
+                        callbacks=[CheckParametersConvergence(tolerance=0.01)])
+        model_1_trace = approx_dep.sample(5000)
+
+        # Sampling from the posterior setting test data to check the predictions on unseen data
+
+    with model_1:
+        pm.set_data({"profile_cluster_idx": clusters_test,
+                     "daypart": dayparts_test,
+                     "dp_fs_sin_1": daypart_fs_sin_1_test,
+                     "dp_fs_sin_2": daypart_fs_sin_2_test,
+                     "dp_fs_sin_3": daypart_fs_sin_3_test,
+                     "dp_fs_cos_1": daypart_fs_cos_1_test,
+                     "dp_fs_cos_2": daypart_fs_cos_2_test,
+                     "dp_fs_cos_3": daypart_fs_cos_3_test,
+                     "outdoor_temp": outdoor_temp_test
+                     })
+
+        model_1_posterior_hdi = pm.sample_posterior_predictive(model_1_trace, keep_size=True)
+        model_1_posterior = pm.sample_posterior_predictive(model_1_trace)
+        model_1_prior = pm.sample_prior_predictive(150)
+
+        # save traceplots here
+
+        # Debugging ADVI to understand if the estimation is converging
+
+    az.plot_trace(model_1_trace['tbal_h'][None, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_h_ad.png')
+    az.plot_trace(model_1_trace['tbal_c'][None, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_c_ad.png')
+    az.plot_trace(model_1_trace['bth'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_bth_ad.png')
+    az.plot_trace(model_1_trace['btc'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_btc_ad.png')
+    az.plot_trace(model_1_trace['dep_h'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_h_ad.png')
+    az.plot_trace(model_1_trace['dep_c'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_c_ad.png')
+
+    plt.show()
+    # Calculate predictions and HDI
+
+    model_1_predictions = np.exp(model_1_posterior['y'].mean(0))
+    hdi_data = az.hdi(model_1_posterior_hdi)
+    model_1_lower_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='lower'))).flatten()
+    model_1_higher_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='higher'))).flatten()
+
+    # Calculate adjusted coverage
+    model_1_gamma = np.where(test_df.total_electricity > model_1_higher_bound,
+                              1 + ((test_df.total_electricity - model_1_higher_bound) / (
+                                  test_df.total_electricity)),
+                              np.where(test_df.total_electricity < model_1_lower_bound,
+                                       1 + ((model_1_lower_bound - test_df.total_electricity) / (
+                                           test_df.total_electricity)),
+                                       1))
+
+    model_1_adjusted_coverage = np.nanmean(
+        model_1_gamma * (model_1_higher_bound) / (model_1_lower_bound))
+
+    # Calculate cvrmse and coverage of the HDI
+    model_1_mse = mean_squared_error(test_df.total_electricity, model_1_predictions)
+    model_1_rmse = sqrt(model_1_mse)
+    model_1_cvrmse = model_1_rmse / test_df.total_electricity.mean()
+    model_1_coverage = sum((model_1_lower_bound <= test_df.total_electricity) & (
+            test_df.total_electricity <= model_1_higher_bound)) * 100 / len(test_df)
+    model_1_confidence_length = sum(model_1_higher_bound) - sum(model_1_lower_bound)
+
+    # Calculate NMBE
+    model_1_nmbe = np.sum(test_df.total_electricity - model_1_predictions) * 100 / len(
+        test_df) / test_df.total_electricity.mean()
+
+    # Print df
+    mod_1_data = {'t': test_df['t'],
+               'prediction': model_1_predictions,
+               'lower_bound': model_1_lower_bound,
+               'higher_bound': model_1_higher_bound}
+
+    mod_1_results = pd.DataFrame(data=ad_data)
+    mod_1_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_mod_1.csv", index=False)
+
+    export_data = {'mod_1_cvrmse': [model_1_cvrmse],
+                   'mod_1_adjusted_coverage': [model_1_adjusted_coverage],
+                   'mod_1_nmbe': [model_1_nmbe],
+                   'id': building_id}
+
+    export_df = pd.DataFrame(data=export_data)
+    return export_df
+
 def bayesian_model_comparison (df):
     # Preprocess
     df["log_v"] = log_electricity = np.log(df["total_electricity"]).values
@@ -1405,7 +1605,7 @@ def multiprocessing_bayesian_comparison(df):
             print('Results for ' + building_id + ' are already calculated. Skipping to next building')
         else:
             try:
-                model_results = bayesian_model_comparison_model_spec(df_preprocessed, building_id)
+                model_results = bayesian_model_comparison_test_1(df_preprocessed, building_id)
                 res = pd.read_csv("/root/benedetto/results/bayes_results.csv")
                 final_export = res.append(model_results)
                 final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
@@ -1415,7 +1615,7 @@ def multiprocessing_bayesian_comparison(df):
                 print('Modeling error for ' + building_id + '. Skipping to the next building')
     else:
         try:
-            model_results = bayesian_model_comparison_model_spec(df_preprocessed, building_id)
+            model_results = bayesian_model_comparison_test_1(df_preprocessed, building_id)
             final_export = model_results
             final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
         except Exception as e:
