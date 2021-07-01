@@ -879,6 +879,7 @@ def bayesian_model_comparison_whole_year (df, building_id):
 def bayesian_model_comparison_model_spec (df, building_id):
     #df = pd.read_csv("/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Fox_education_Ollie_preprocess.csv")
     #df = pd.read_csv("/root/benedetto/results/buildings/Crow_education_Keisha_preprocess.csv")
+    #df = pd.read_csv("/Users/benedetto/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Fox_education_Ollie_preprocess.csv")
     # Preprocess
     df["log_v"] = log_electricity = np.log(df["total_electricity"]).values
 
@@ -917,12 +918,12 @@ def bayesian_model_comparison_model_spec (df, building_id):
     daypart_fs_cos_1_train = train_df.daypart_fs_cos_1
     daypart_fs_cos_2_train = train_df.daypart_fs_cos_2
     daypart_fs_cos_3_train = train_df.daypart_fs_cos_3
-    yearpart_fs_sin_1_train = train_df.yearpart_fs_sin_1
-    yearpart_fs_sin_2_train = train_df.yearpart_fs_sin_2
-    yearpart_fs_sin_3_train = train_df.yearpart_fs_sin_3
-    yearpart_fs_cos_1_train = train_df.yearpart_fs_cos_1
-    yearpart_fs_cos_2_train = train_df.yearpart_fs_cos_2
-    yearpart_fs_cos_3_train = train_df.yearpart_fs_cos_3
+    # yearpart_fs_sin_1_train = train_df.yearpart_fs_sin_1
+    # yearpart_fs_sin_2_train = train_df.yearpart_fs_sin_2
+    # yearpart_fs_sin_3_train = train_df.yearpart_fs_sin_3
+    # yearpart_fs_cos_1_train = train_df.yearpart_fs_cos_1
+    # yearpart_fs_cos_2_train = train_df.yearpart_fs_cos_2
+    # yearpart_fs_cos_3_train = train_df.yearpart_fs_cos_3
 
     # Define test variables
     clusters_test = test_df.s
@@ -939,12 +940,12 @@ def bayesian_model_comparison_model_spec (df, building_id):
     daypart_fs_cos_1_test = test_df.daypart_fs_cos_1
     daypart_fs_cos_2_test = test_df.daypart_fs_cos_2
     daypart_fs_cos_3_test = test_df.daypart_fs_cos_3
-    yearpart_fs_sin_1_test = test_df.yearpart_fs_sin_1
-    yearpart_fs_sin_2_test = test_df.yearpart_fs_sin_2
-    yearpart_fs_sin_3_test = test_df.yearpart_fs_sin_3
-    yearpart_fs_cos_1_test = test_df.yearpart_fs_cos_1
-    yearpart_fs_cos_2_test = test_df.yearpart_fs_cos_2
-    yearpart_fs_cos_3_test = test_df.yearpart_fs_cos_3
+    # yearpart_fs_sin_1_test = test_df.yearpart_fs_sin_1
+    # yearpart_fs_sin_2_test = test_df.yearpart_fs_sin_2
+    # yearpart_fs_sin_3_test = test_df.yearpart_fs_sin_3
+    # yearpart_fs_cos_1_test = test_df.yearpart_fs_cos_1
+    # yearpart_fs_cos_2_test = test_df.yearpart_fs_cos_2
+    # yearpart_fs_cos_3_test = test_df.yearpart_fs_cos_3
 
     # create coords for pymc3
     coords = {"obs_id": np.arange(total_electricity_train.size)}
@@ -967,13 +968,13 @@ def bayesian_model_comparison_model_spec (df, building_id):
         dp_fs_cos_2 = pm.Data("dp_fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
         dp_fs_cos_3 = pm.Data("dp_fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
 
-        yp_fs_sin_1 = pm.Data("yp_fs_sin_1", yearpart_fs_sin_1_train, dims="obs_id")
-        yp_fs_sin_2 = pm.Data("yp_fs_sin_2", yearpart_fs_sin_2_train, dims="obs_id")
-        yp_fs_sin_3 = pm.Data("yp_fs_sin_3", yearpart_fs_sin_3_train, dims="obs_id")
-
-        yp_fs_cos_1 = pm.Data("yp_fs_cos_1", yearpart_fs_cos_1_train, dims="obs_id")
-        yp_fs_cos_2 = pm.Data("yp_fs_cos_2", yearpart_fs_cos_2_train, dims="obs_id")
-        yp_fs_cos_3 = pm.Data("yp_fs_cos_3", yearpart_fs_cos_3_train, dims="obs_id")
+        # yp_fs_sin_1 = pm.Data("yp_fs_sin_1", yearpart_fs_sin_1_train, dims="obs_id")
+        # yp_fs_sin_2 = pm.Data("yp_fs_sin_2", yearpart_fs_sin_2_train, dims="obs_id")
+        # yp_fs_sin_3 = pm.Data("yp_fs_sin_3", yearpart_fs_sin_3_train, dims="obs_id")
+        #
+        # yp_fs_cos_1 = pm.Data("yp_fs_cos_1", yearpart_fs_cos_1_train, dims="obs_id")
+        # yp_fs_cos_2 = pm.Data("yp_fs_cos_2", yearpart_fs_cos_2_train, dims="obs_id")
+        # yp_fs_cos_3 = pm.Data("yp_fs_cos_3", yearpart_fs_cos_3_train, dims="obs_id")
 
         #cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
         #heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
@@ -1022,8 +1023,8 @@ def bayesian_model_comparison_model_spec (df, building_id):
         bcy3 = pm.Normal("bcy3", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
 
         # Balance temp
-        tbal_h = pm.Normal("tbal_h", mu=18.0, sigma=1.5, dims=("daypart"))
-        tbal_c = pm.Normal("tbal_c", mu=18.0, sigma=1.5, dims=("daypart"))
+        tbal_h = pm.Uniform("tbal_h", lower = 10, upper = 25)
+        tbal_c = pm.Uniform("tbal_c", lower = 10, upper = 25)
 
         # Dependence
         # dep_h = BoundNormal("dep_h", mu=0.5, sigma=0.5, dims="profile_cluster")
@@ -1036,10 +1037,10 @@ def bayesian_model_comparison_model_spec (df, building_id):
              bsd2[profile_cluster_idx] * dp_fs_sin_2 + bsd3[profile_cluster_idx] * dp_fs_sin_3 + \
              bcd1[profile_cluster_idx] * dp_fs_cos_1 + bcd2[profile_cluster_idx] * dp_fs_cos_2 + \
              bcd3[profile_cluster_idx] * dp_fs_cos_3 + \
-             btc[daypart] * (outdoor_temp - tbal_c[daypart]) * ((outdoor_temp - tbal_c[daypart]) > 0) * (
-                     btc[daypart] > 0.001) + \
-             bth[daypart] * (tbal_h[daypart] - outdoor_temp) * ((tbal_h[daypart] - outdoor_temp) > 0) * (
-                     bth[daypart] > 0.001)
+             btc[daypart] * (outdoor_temp - tbal_c) * ((outdoor_temp - tbal_c) > 0) * (
+                     dep_c[profile_cluster_idx] > 0.5) + \
+             bth[daypart] * (tbal_h - outdoor_temp) * ((tbal_h - outdoor_temp) > 0) * (
+                     dep_h[profile_cluster_idx] > 0.5)
         # btclp[profile_cluster_idx] * cooling_temp_lp + \
         # bthlp[profile_cluster_idx] * heating_temp_lp + \
         # btc[profile_cluster_idx] * cooling_temp + \
@@ -1056,7 +1057,7 @@ def bayesian_model_comparison_model_spec (df, building_id):
         approx_dep = pm.fit(n=50000,
                         method='fullrank_advi',
                         callbacks=[CheckParametersConvergence(tolerance=0.01)])
-        advi_dep_trace = approx_dep.sample(3000)
+        advi_dep_trace = approx_dep.sample(5000)
 
         # Sampling from the posterior setting test data to check the predictions on unseen data
 
@@ -1070,12 +1071,12 @@ def bayesian_model_comparison_model_spec (df, building_id):
                      "dp_fs_cos_1": daypart_fs_cos_1_test,
                      "dp_fs_cos_2": daypart_fs_cos_2_test,
                      "dp_fs_cos_3": daypart_fs_cos_3_test,
-                     "yp_fs_sin_1": yearpart_fs_sin_1_test,
-                     "yp_fs_sin_2": yearpart_fs_sin_2_test,
-                     "yp_fs_sin_3": yearpart_fs_sin_3_test,
-                     "yp_fs_cos_1": yearpart_fs_cos_1_test,
-                     "yp_fs_cos_2": yearpart_fs_cos_2_test,
-                     "yp_fs_cos_3": yearpart_fs_cos_3_test,
+                     # "yp_fs_sin_1": yearpart_fs_sin_1_test,
+                     # "yp_fs_sin_2": yearpart_fs_sin_2_test,
+                     # "yp_fs_sin_3": yearpart_fs_sin_3_test,
+                     # "yp_fs_cos_1": yearpart_fs_cos_1_test,
+                     # "yp_fs_cos_2": yearpart_fs_cos_2_test,
+                     # "yp_fs_cos_3": yearpart_fs_cos_3_test,
                      #"cooling_temp": outdoor_temp_c_test,
                      #"heating_temp": outdoor_temp_h_test,
                      #"cooling_temp_lp": outdoor_temp_lp_c_test,
@@ -1091,9 +1092,9 @@ def bayesian_model_comparison_model_spec (df, building_id):
 
         # Debugging ADVI to understand if the estimation is converging
 
-    az.plot_trace(advi_dep_trace['tbal_h'][None, :, :])
+    az.plot_trace(advi_dep_trace['tbal_h'][None, :])
     plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_h_ad.png')
-    az.plot_trace(advi_dep_trace['tbal_c'][None, :, :])
+    az.plot_trace(advi_dep_trace['tbal_c'][None, :])
     plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_c_ad.png')
     az.plot_trace(advi_dep_trace['bth'][None, :, :])
     plt.savefig('/root/benedetto/results/plots/' + building_id + '_bth_ad.png')
@@ -1144,11 +1145,11 @@ def bayesian_model_comparison_model_spec (df, building_id):
         test_df) / test_df.total_electricity.mean()
 
     # Bokeh plots to compare NUTS and ADVI
-    p1 = figure(plot_width=800, plot_height=400, x_axis_type='datetime')
-    p1.line(test_df['t'], advi_dep_predictions, color="navy", alpha=0.8)
-    p1.line(test_df['t'], test_df['total_electricity'], color="orange", alpha=0.6)
-    p1.varea(x=test_df['t'], y1=advi_dep_lower_bound, y2=advi_dep_higher_bound, color='gray', alpha=0.2)
-    show(p1)
+    # p1 = figure(plot_width=800, plot_height=400, x_axis_type='datetime')
+    # p1.line(test_df['t'], advi_dep_predictions, color="navy", alpha=0.8)
+    # p1.line(test_df['t'], test_df['total_electricity'], color="orange", alpha=0.6)
+    # p1.varea(x=test_df['t'], y1=advi_dep_lower_bound, y2=advi_dep_higher_bound, color='gray', alpha=0.2)
+    # show(p1)
 
     # p2 = figure(plot_width=800, plot_height=400, x_axis_type='datetime')
     # p2.line(test_df['t'], nuts_binomial_predictions, color="navy", alpha=0.8)
@@ -1167,202 +1168,198 @@ def bayesian_model_comparison_model_spec (df, building_id):
 
     # Model 2: NUTS binomial
 
-    with pm.Model(coords=coords) as nuts_binomial:
-        profile_cluster_idx = pm.Data("profile_cluster_idx", clusters_train, dims="obs_id")
-        daypart = pm.Data("daypart", dayparts_train, dims="obs_id")
-        #weekday = pm.Data("weekday", weekdays_train, dims="obs_id")
+    # with pm.Model(coords=coords) as nuts_binomial:
+    #     profile_cluster_idx = pm.Data("profile_cluster_idx", clusters_train, dims="obs_id")
+    #     daypart = pm.Data("daypart", dayparts_train, dims="obs_id")
+    #     #weekday = pm.Data("weekday", weekdays_train, dims="obs_id")
+    #
+    #     dp_fs_sin_1 = pm.Data("dp_fs_sin_1", daypart_fs_sin_1_train, dims="obs_id")
+    #     dp_fs_sin_2 = pm.Data("dp_fs_sin_2", daypart_fs_sin_2_train, dims="obs_id")
+    #     dp_fs_sin_3 = pm.Data("dp_fs_sin_3", daypart_fs_sin_3_train, dims="obs_id")
+    #
+    #     dp_fs_cos_1 = pm.Data("dp_fs_cos_1", daypart_fs_cos_1_train, dims="obs_id")
+    #     dp_fs_cos_2 = pm.Data("dp_fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
+    #     dp_fs_cos_3 = pm.Data("dp_fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
+    #
+    #     #yp_fs_sin_1 = pm.Data("yp_fs_sin_1", yearpart_fs_sin_1_train, dims="obs_id")
+    #     #yp_fs_sin_2 = pm.Data("yp_fs_sin_2", yearpart_fs_sin_2_train, dims="obs_id")
+    #     #yp_fs_sin_3 = pm.Data("yp_fs_sin_3", yearpart_fs_sin_3_train, dims="obs_id")
+    #
+    #     #yp_fs_cos_1 = pm.Data("yp_fs_cos_1", yearpart_fs_cos_1_train, dims="obs_id")
+    #     #yp_fs_cos_2 = pm.Data("yp_fs_cos_2", yearpart_fs_cos_2_train, dims="obs_id")
+    #     #yp_fs_cos_3 = pm.Data("yp_fs_cos_3", yearpart_fs_cos_3_train, dims="obs_id")
+    #
+    #     #cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
+    #     #heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
+    #     #cooling_temp_lp = pm.Data("cooling_temp_lp", outdoor_temp_lp_c_train, dims="obs_id")
+    #     #heating_temp_lp = pm.Data("heating_temp_lp", outdoor_temp_lp_h_train, dims="obs_id")
+    #     outdoor_temp = pm.Data("outdoor_temp", outdoor_temp_train, dims="obs_id")
+    #
+    #     # Hyperpriors:
+    #     #BoundNormal = pm.Bound(pm.Normal, lower=0.0, upper=1.0)
+    #     #mu_btc = pm.Normal("mu_btc", mu=0.0, sigma=1.0)
+    #     sigma_btc = pm.Exponential("sigma_btc", 1.0)
+    #     #mu_bth = pm.Normal("mu_bth", mu=0.0, sigma=1.0)
+    #     sigma_bth = pm.Exponential("sigma_bth", 1.0)
+    #     #mu_btclp = pm.Normal("mu_btclp", mu=0.0, sigma=1.0)
+    #     #sigma_btclp = pm.Exponential("sigma_btclp", 1.0)
+    #     #mu_bthlp = pm.Normal("mu_bthlp", mu=0.0, sigma=1.0)
+    #     #sigma_bthlp = pm.Exponential("sigma_bthlp", 1.0)
+    #     bf = pm.Normal("bf", mu=0.0, sigma=1.0)
+    #     sigma_bf = pm.Exponential("sigma_bf", 1.0)
+    #     a = pm.Normal("a", mu=0.0, sigma=1.0)
+    #     sigma_a = pm.Exponential("sigma_a", 1.0)
+    #     # k = pm.Gamma('k', alpha=15, beta=15)
+    #     # lambda_ = pm.Gamma('lambda_', alpha=15, beta=15)
+    #     # bounded_laplacian = pm.Bound(pm.Laplace, lower=0, upper=5)
+    #
+    #     btc = pm.HalfNormal("btc", sigma=sigma_btc, dims="daypart")
+    #     bth = pm.HalfNormal("bth", sigma=sigma_bth, dims="daypart")
+    #     #btclp = pm.Normal("btclp", mu=mu_btclp, sigma=sigma_btclp, dims="profile_cluster")
+    #     #bthlp = pm.Normal("bthlp", mu=mu_bthlp, sigma=sigma_bthlp, dims="profile_cluster")
+    #
+    #     # Varying intercepts
+    #     a_cluster = pm.Normal("a_cluster", mu=a, sigma=sigma_a, dims=("profile_cluster"))
+    #
+    #     # Varying slopes:
+    #     bsd1 = pm.Normal("bsd1", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+    #     bsd2 = pm.Normal("bsd2", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+    #     bsd3 = pm.Normal("bsd3", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+    #
+    #     bcd1 = pm.Normal("bcd1", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+    #     bcd2 = pm.Normal("bcd2", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+    #     bcd3 = pm.Normal("bcd3", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+    #
+    #     #bsy1 = pm.Normal("bsy1", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+    #     #bsy2 = pm.Normal("bsy2", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+    #     #bsy3 = pm.Normal("bsy3", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+    #
+    #     #bcy1 = pm.Normal("bcy1", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+    #     #bcy2 = pm.Normal("bcy2", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+    #     #bcy3 = pm.Normal("bcy3", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+    #
+    #     # Balance temp
+    #     tbal_h = pm.Normal("tbal_h", mu=18.0, sigma=1.5, dims = "daypart")
+    #     tbal_c = pm.Normal("tbal_c", mu=18.0, sigma=1.5, dims = "daypart")
+    #
+    #     # Dependence
+    #     #dep_h = pm.Bernoulli("dep_h", p=0.5, dims="profile_cluster")
+    #     #dep_c = pm.Bernoulli("dep_c", p=0.5, dims="profile_cluster")
+    #
+    #     # Expected value per county:
+    #     mu = a_cluster[profile_cluster_idx] + bsd1[profile_cluster_idx] * dp_fs_sin_1 + \
+    #          bsd2[profile_cluster_idx] * dp_fs_sin_2 + bsd3[profile_cluster_idx] * dp_fs_sin_3 + \
+    #          bcd1[profile_cluster_idx] * dp_fs_cos_1 + bcd2[profile_cluster_idx] * dp_fs_cos_2 + \
+    #          bcd3[profile_cluster_idx] * dp_fs_cos_3 + \
+    #          btc[daypart] * (outdoor_temp - tbal_c[daypart]) * ((outdoor_temp - tbal_c[daypart]) > 0) * (
+    #                  btc[daypart] > 0.001) + \
+    #          bth[daypart] * (tbal_h[daypart] - outdoor_temp) * ((tbal_h[daypart] - outdoor_temp) > 0) * (
+    #                  bth[daypart] > 0.001)
+    #
+    #     # Model error:
+    #     sigma = pm.Exponential("sigma", 1.0)
+    #
+    #     # Likelihood
+    #     y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity_train, dims="obs_id")
+    #
+    # # Sample fitting
+    #
+    # with nuts_binomial:
+    #     nuts_binomial_trace = pm.sample(8000, tune = 2000, chains = 4, cores = 1, target_accept=0.9)
+    #
+    # # Sampling from the posterior setting test data to check the predictions on unseen data
+    # with nuts_binomial:
+    #     pm.set_data({"profile_cluster_idx": clusters_test,
+    #                  "daypart": dayparts_test,
+    #                  # "weekday":weekdays_test,
+    #                  "dp_fs_sin_1": daypart_fs_sin_1_test,
+    #                  "dp_fs_sin_2": daypart_fs_sin_2_test,
+    #                  "dp_fs_sin_3": daypart_fs_sin_3_test,
+    #                  "dp_fs_cos_1": daypart_fs_cos_1_test,
+    #                  "dp_fs_cos_2": daypart_fs_cos_2_test,
+    #                  "dp_fs_cos_3": daypart_fs_cos_3_test,
+    #                  "yp_fs_sin_1": yearpart_fs_sin_1_test,
+    #                  "yp_fs_sin_2": yearpart_fs_sin_2_test,
+    #                  "yp_fs_sin_3": yearpart_fs_sin_3_test,
+    #                  "yp_fs_cos_1": yearpart_fs_cos_1_test,
+    #                  "yp_fs_cos_2": yearpart_fs_cos_2_test,
+    #                  "yp_fs_cos_3": yearpart_fs_cos_3_test,
+    #                  #"cooling_temp": outdoor_temp_c_test,
+    #                  #"heating_temp": outdoor_temp_h_test,
+    #                  #"cooling_temp_lp": outdoor_temp_lp_c_test,
+    #                  #"heating_temp_lp": outdoor_temp_lp_h_test,
+    #                  "outdoor_temp": outdoor_temp_test
+    #                  })
+    #
+    #     nuts_binomial_posterior_hdi = pm.sample_posterior_predictive(nuts_binomial_trace, keep_size=True)
+    #     nuts_binomial_posterior = pm.sample_posterior_predictive(nuts_binomial_trace)
+    #
+    # # Save traceplots for temperatures, dep and elbo here
+    #
+    # # Debugging ADVI to understand if the estimation is converging
+    # az.plot_trace(nuts_binomial_trace['tbal_h'][None, :])
+    # plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_h_nb.png')
+    # az.plot_trace(nuts_binomial_trace['tbal_c'][None, :])
+    # plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_c_nb.png')
+    # az.plot_trace(nuts_binomial_trace['bth'][None, :, :])
+    # plt.savefig('/root/benedetto/results/plots/' + building_id + '_bth_nb.png')
+    # az.plot_trace(nuts_binomial_trace['btc'][None, :, :])
+    # plt.savefig('/root/benedetto/results/plots/' + building_id + '_btc_nb.png')
+    # az.plot_trace(nuts_binomial_trace['dep_h'][None, :, :])
+    # plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_h_nb.png')
+    # az.plot_trace(nuts_binomial_trace['dep_c'][None, :, :])
+    # plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_c_nb.png')
+    #
+    # plt.show()
+    # # Calculate predictions and HDI
+    #
+    # nuts_binomial_predictions = np.exp(nuts_binomial_posterior['y'].mean(0))
+    # hdi_data = az.hdi(nuts_binomial_posterior_hdi)
+    # nuts_binomial_lower_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='lower'))).flatten()
+    # nuts_binomial_higher_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='higher'))).flatten()
+    #
+    # # Calculate adjusted coverage
+    # nuts_binomial_gamma = np.where(test_df.total_electricity > nuts_binomial_higher_bound,
+    #                               1 + ((test_df.total_electricity - nuts_binomial_higher_bound) / (
+    #                                   test_df.total_electricity)),
+    #                               np.where(test_df.total_electricity < nuts_binomial_lower_bound,
+    #                                        1 + ((nuts_binomial_lower_bound - test_df.total_electricity) / (
+    #                                            test_df.total_electricity)),
+    #                                        1))
+    #
+    # nuts_binomial_adjusted_coverage = np.nanmean(
+    #     nuts_binomial_gamma * (nuts_binomial_higher_bound) / (nuts_binomial_lower_bound))
+    #
+    # # Calculate cvrmse and coverage of the HDI
+    # nuts_binomial_mse = mean_squared_error(test_df.total_electricity, nuts_binomial_predictions)
+    # nuts_binomial_rmse = sqrt(nuts_binomial_mse)
+    # nuts_binomial_cvrmse = nuts_binomial_rmse / test_df.total_electricity.mean()
+    # nuts_binomial_coverage = sum((nuts_binomial_lower_bound <= test_df.total_electricity) & (
+    #         test_df.total_electricity <= nuts_binomial_higher_bound)) * 100 / len(test_df)
+    # nuts_binomial_confidence_length = sum(nuts_binomial_higher_bound) - sum(nuts_binomial_lower_bound)
+    #
+    # # Calculate NMBE
+    # nuts_binomial_nmbe = np.sum(test_df.total_electricity - nuts_binomial_predictions) * 100 / len(
+    #     test_df) / test_df.total_electricity.mean()
+    #
+    # p1 = figure(plot_width=800, plot_height=400, x_axis_type='datetime')
+    # p1.line(test_df['t'], nuts_binomial_predictions, color="navy", alpha=0.8)
+    # p1.line(test_df['t'], test_df['total_electricity'], color="orange", alpha=0.6)
+    # p1.varea(x=test_df['t'], y1=nuts_binomial_lower_bound, y2=nuts_binomial_higher_bound, color='gray', alpha=0.2)
+    # show(p1)
+    #
+    # # Print df
+    # nb_data = {'t': test_df['t'],
+    #            'prediction': nuts_binomial_predictions,
+    #            'lower_bound': nuts_binomial_lower_bound,
+    #            'higher_bound': nuts_binomial_higher_bound}
+    #
+    # nb_results = pd.DataFrame(data=nb_data)
+    # nb_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_nb.csv", index=False)
 
-        dp_fs_sin_1 = pm.Data("dp_fs_sin_1", daypart_fs_sin_1_train, dims="obs_id")
-        dp_fs_sin_2 = pm.Data("dp_fs_sin_2", daypart_fs_sin_2_train, dims="obs_id")
-        dp_fs_sin_3 = pm.Data("dp_fs_sin_3", daypart_fs_sin_3_train, dims="obs_id")
 
-        dp_fs_cos_1 = pm.Data("dp_fs_cos_1", daypart_fs_cos_1_train, dims="obs_id")
-        dp_fs_cos_2 = pm.Data("dp_fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
-        dp_fs_cos_3 = pm.Data("dp_fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
-
-        #yp_fs_sin_1 = pm.Data("yp_fs_sin_1", yearpart_fs_sin_1_train, dims="obs_id")
-        #yp_fs_sin_2 = pm.Data("yp_fs_sin_2", yearpart_fs_sin_2_train, dims="obs_id")
-        #yp_fs_sin_3 = pm.Data("yp_fs_sin_3", yearpart_fs_sin_3_train, dims="obs_id")
-
-        #yp_fs_cos_1 = pm.Data("yp_fs_cos_1", yearpart_fs_cos_1_train, dims="obs_id")
-        #yp_fs_cos_2 = pm.Data("yp_fs_cos_2", yearpart_fs_cos_2_train, dims="obs_id")
-        #yp_fs_cos_3 = pm.Data("yp_fs_cos_3", yearpart_fs_cos_3_train, dims="obs_id")
-
-        #cooling_temp = pm.Data("cooling_temp", outdoor_temp_c_train, dims="obs_id")
-        #heating_temp = pm.Data("heating_temp", outdoor_temp_h_train, dims="obs_id")
-        #cooling_temp_lp = pm.Data("cooling_temp_lp", outdoor_temp_lp_c_train, dims="obs_id")
-        #heating_temp_lp = pm.Data("heating_temp_lp", outdoor_temp_lp_h_train, dims="obs_id")
-        outdoor_temp = pm.Data("outdoor_temp", outdoor_temp_train, dims="obs_id")
-
-        # Hyperpriors:
-        #BoundNormal = pm.Bound(pm.Normal, lower=0.0, upper=1.0)
-        #mu_btc = pm.Normal("mu_btc", mu=0.0, sigma=1.0)
-        sigma_btc = pm.Exponential("sigma_btc", 1.0)
-        #mu_bth = pm.Normal("mu_bth", mu=0.0, sigma=1.0)
-        sigma_bth = pm.Exponential("sigma_bth", 1.0)
-        #mu_btclp = pm.Normal("mu_btclp", mu=0.0, sigma=1.0)
-        #sigma_btclp = pm.Exponential("sigma_btclp", 1.0)
-        #mu_bthlp = pm.Normal("mu_bthlp", mu=0.0, sigma=1.0)
-        #sigma_bthlp = pm.Exponential("sigma_bthlp", 1.0)
-        bf = pm.Normal("bf", mu=0.0, sigma=1.0)
-        sigma_bf = pm.Exponential("sigma_bf", 1.0)
-        a = pm.Normal("a", mu=0.0, sigma=1.0)
-        sigma_a = pm.Exponential("sigma_a", 1.0)
-        # k = pm.Gamma('k', alpha=15, beta=15)
-        # lambda_ = pm.Gamma('lambda_', alpha=15, beta=15)
-        # bounded_laplacian = pm.Bound(pm.Laplace, lower=0, upper=5)
-
-        btc = pm.HalfNormal("btc", sigma=sigma_btc, dims="daypart")
-        bth = pm.HalfNormal("bth", sigma=sigma_bth, dims="daypart")
-        #btclp = pm.Normal("btclp", mu=mu_btclp, sigma=sigma_btclp, dims="profile_cluster")
-        #bthlp = pm.Normal("bthlp", mu=mu_bthlp, sigma=sigma_bthlp, dims="profile_cluster")
-
-        # Varying intercepts
-        a_cluster = pm.Normal("a_cluster", mu=a, sigma=sigma_a, dims=("profile_cluster"))
-
-        # Varying slopes:
-        bsd1 = pm.Normal("bsd1", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
-        bsd2 = pm.Normal("bsd2", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
-        bsd3 = pm.Normal("bsd3", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
-
-        bcd1 = pm.Normal("bcd1", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
-        bcd2 = pm.Normal("bcd2", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
-        bcd3 = pm.Normal("bcd3", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
-
-        #bsy1 = pm.Normal("bsy1", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
-        #bsy2 = pm.Normal("bsy2", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
-        #bsy3 = pm.Normal("bsy3", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
-
-        #bcy1 = pm.Normal("bcy1", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
-        #bcy2 = pm.Normal("bcy2", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
-        #bcy3 = pm.Normal("bcy3", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
-
-        # Balance temp
-        tbal_h = pm.Normal("tbal_h", mu=18.0, sigma=1.5, dims = "daypart")
-        tbal_c = pm.Normal("tbal_c", mu=18.0, sigma=1.5, dims = "daypart")
-
-        # Dependence
-        #dep_h = pm.Bernoulli("dep_h", p=0.5, dims="profile_cluster")
-        #dep_c = pm.Bernoulli("dep_c", p=0.5, dims="profile_cluster")
-
-        # Expected value per county:
-        mu = a_cluster[profile_cluster_idx] + bsd1[profile_cluster_idx] * dp_fs_sin_1 + \
-             bsd2[profile_cluster_idx] * dp_fs_sin_2 + bsd3[profile_cluster_idx] * dp_fs_sin_3 + \
-             bcd1[profile_cluster_idx] * dp_fs_cos_1 + bcd2[profile_cluster_idx] * dp_fs_cos_2 + \
-             bcd3[profile_cluster_idx] * dp_fs_cos_3 + \
-             btc[daypart] * (outdoor_temp - tbal_c[daypart]) * ((outdoor_temp - tbal_c[daypart]) > 0) * (
-                     btc[daypart] > 0.001) + \
-             bth[daypart] * (tbal_h[daypart] - outdoor_temp) * ((tbal_h[daypart] - outdoor_temp) > 0) * (
-                     bth[daypart] > 0.001)
-
-        # Model error:
-        sigma = pm.Exponential("sigma", 1.0)
-
-        # Likelihood
-        y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity_train, dims="obs_id")
-
-    # Sample fitting
-
-    with nuts_binomial:
-        nuts_binomial_trace = pm.sample(8000, tune = 2000, chains = 4, target_accept=0.9)
-
-    # Sampling from the posterior setting test data to check the predictions on unseen data
-
-    with nuts_binomial:
-        pm.set_data({"profile_cluster_idx": clusters_test,
-                     "daypart": dayparts_test,
-                     # "weekday":weekdays_test,
-                     "dp_fs_sin_1": daypart_fs_sin_1_test,
-                     "dp_fs_sin_2": daypart_fs_sin_2_test,
-                     "dp_fs_sin_3": daypart_fs_sin_3_test,
-                     "dp_fs_cos_1": daypart_fs_cos_1_test,
-                     "dp_fs_cos_2": daypart_fs_cos_2_test,
-                     "dp_fs_cos_3": daypart_fs_cos_3_test,
-                     "yp_fs_sin_1": yearpart_fs_sin_1_test,
-                     "yp_fs_sin_2": yearpart_fs_sin_2_test,
-                     "yp_fs_sin_3": yearpart_fs_sin_3_test,
-                     "yp_fs_cos_1": yearpart_fs_cos_1_test,
-                     "yp_fs_cos_2": yearpart_fs_cos_2_test,
-                     "yp_fs_cos_3": yearpart_fs_cos_3_test,
-                     #"cooling_temp": outdoor_temp_c_test,
-                     #"heating_temp": outdoor_temp_h_test,
-                     #"cooling_temp_lp": outdoor_temp_lp_c_test,
-                     #"heating_temp_lp": outdoor_temp_lp_h_test,
-                     "outdoor_temp": outdoor_temp_test
-                     })
-
-        nuts_binomial_posterior_hdi = pm.sample_posterior_predictive(nuts_binomial_trace, keep_size=True)
-        nuts_binomial_posterior = pm.sample_posterior_predictive(nuts_binomial_trace)
-
-    # Save traceplots for temperatures, dep and elbo here
-
-    # Debugging ADVI to understand if the estimation is converging
-    az.plot_trace(nuts_binomial_trace['tbal_h'][None, :])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_h_nb.png')
-    az.plot_trace(nuts_binomial_trace['tbal_c'][None, :])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_c_nb.png')
-    az.plot_trace(nuts_binomial_trace['bth'][None, :, :])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_bth_nb.png')
-    az.plot_trace(nuts_binomial_trace['btc'][None, :, :])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_btc_nb.png')
-    az.plot_trace(nuts_binomial_trace['dep_h'][None, :, :])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_h_nb.png')
-    az.plot_trace(nuts_binomial_trace['dep_c'][None, :, :])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_c_nb.png')
-
-    plt.show()
-    # Calculate predictions and HDI
-
-    nuts_binomial_predictions = np.exp(nuts_binomial_posterior['y'].mean(0))
-    hdi_data = az.hdi(nuts_binomial_posterior_hdi)
-    nuts_binomial_lower_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='lower'))).flatten()
-    nuts_binomial_higher_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='higher'))).flatten()
-
-    # Calculate adjusted coverage
-    nuts_binomial_gamma = np.where(test_df.total_electricity > nuts_binomial_higher_bound,
-                                  1 + ((test_df.total_electricity - nuts_binomial_higher_bound) / (
-                                      test_df.total_electricity)),
-                                  np.where(test_df.total_electricity < nuts_binomial_lower_bound,
-                                           1 + ((nuts_binomial_lower_bound - test_df.total_electricity) / (
-                                               test_df.total_electricity)),
-                                           1))
-
-    nuts_binomial_adjusted_coverage = np.nanmean(
-        nuts_binomial_gamma * (nuts_binomial_higher_bound) / (nuts_binomial_lower_bound))
-
-    # Calculate cvrmse and coverage of the HDI
-    nuts_binomial_mse = mean_squared_error(test_df.total_electricity, nuts_binomial_predictions)
-    nuts_binomial_rmse = sqrt(nuts_binomial_mse)
-    nuts_binomial_cvrmse = nuts_binomial_rmse / test_df.total_electricity.mean()
-    nuts_binomial_coverage = sum((nuts_binomial_lower_bound <= test_df.total_electricity) & (
-            test_df.total_electricity <= nuts_binomial_higher_bound)) * 100 / len(test_df)
-    nuts_binomial_confidence_length = sum(nuts_binomial_higher_bound) - sum(nuts_binomial_lower_bound)
-
-    # Calculate NMBE
-    nuts_binomial_nmbe = np.sum(test_df.total_electricity - nuts_binomial_predictions) * 100 / len(
-        test_df) / test_df.total_electricity.mean()
-
-    p1 = figure(plot_width=800, plot_height=400, x_axis_type='datetime')
-    p1.line(test_df['t'], nuts_binomial_predictions, color="navy", alpha=0.8)
-    p1.line(test_df['t'], test_df['total_electricity'], color="orange", alpha=0.6)
-    p1.varea(x=test_df['t'], y1=nuts_binomial_lower_bound, y2=nuts_binomial_higher_bound, color='gray', alpha=0.2)
-    show(p1)
-
-    # Print df
-    nb_data = {'t': test_df['t'],
-               'prediction': nuts_binomial_predictions,
-               'lower_bound': nuts_binomial_lower_bound,
-               'higher_bound': nuts_binomial_higher_bound}
-
-    nb_results = pd.DataFrame(data=nb_data)
-    nb_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_nb.csv", index=False)
-
-
-    export_data = {'nuts_binomial_cvrmse': [nuts_binomial_cvrmse],
-                   'advi_dep_cvrmse': [advi_dep_cvrmse],
-                   'nuts_binomial_adjusted_coverage': [nuts_binomial_adjusted_coverage],
+    export_data = {'advi_dep_cvrmse': [advi_dep_cvrmse],
                    'advi_dep_adjusted_coverage': [advi_dep_adjusted_coverage],
-                   'nuts_binomial_nmbe': [nuts_binomial_nmbe],
                    'advi_dep_nmbe': [advi_dep_nmbe],
                    'id': building_id}
 
