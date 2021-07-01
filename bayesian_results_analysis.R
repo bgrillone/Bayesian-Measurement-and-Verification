@@ -10,7 +10,7 @@ df_2 <- fread("/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/results/bay
 df_3 <- fread("/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/results/bayes_results_iteration_3.csv")
 df_5 <- fread("/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/results/bayes_results_iteration_5.csv")
 cluster_df <-  fread("/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/results/cluster_length.csv")
-metadata <- fread('/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/building_data_genome_2/metadata.csv')
+metadata <- fread('/Users/benedetto/Nextcloud/PhD-Benedetto/Bayesian/data/building_data_genome_2/metadata.csv')
 
 # Model comparison
 df_1$pp_better <- as.factor(ifelse(df_1$partial_pooling_cvrmse< df_1$no_pooling_cvrmse & df_1$partial_pooling_cvrmse < df_1$complete_pooling_cvrmse, 'yes', 'no'))
@@ -173,7 +173,7 @@ mean(data.matrix(df[df$no_pooling_cvrmse<1, 'no_pooling_cvrmse']))
 ids <- df[df$partial_pooling_cvrmse>1 & df$partial_pooling_cvrmse<5, 'id']
 
 # ADVI vs NUTS analysis
-df <- fread("/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/results/bayes_results_iteration_5.csv")
+df_old <- fread("/Users/benedetto/Nextcloud/PhD-Benedetto/Bayesian/data/results/bayes_results_iteration_5.csv")
 
 df$nuts_better <- as.factor(ifelse(df$nuts_binomial_cvrmse < df$advi_dep_cvrmse, 'yes', 'no'))
 df$nuts_better_cov <- as.factor(ifelse(df$nuts_binomial_adjusted_coverage < df$advi_dep_adjusted_coverage, 'yes', 'no'))
@@ -181,21 +181,21 @@ df$nuts_better_cov <- as.factor(ifelse(df$nuts_binomial_adjusted_coverage < df$a
 table(df$nuts_better)
 table(df$nuts_better_cov)
 
-cvrmse_df <- df %>% 
+cvrmse_df <- df_old %>% 
   select(id, nuts_binomial_cvrmse, nuts_binomial_2_cvrmse, advi_dep_cvrmse, advi_dep_2_cvrmse) %>%
   melt(id.vars = 'id')
 
-nmbe_df <- df %>% 
+nmbe_df <- df_old %>% 
   select(id, nuts_binomial_nmbe, nuts_binomial_2_nmbe, advi_dep_nmbe, advi_dep_2_nmbe) %>%
   melt(id.vars = 'id')
 
-cov_df <- df %>% 
+cov_df <- df_old %>% 
   select(id, nuts_binomial_adjusted_coverage, nuts_binomial_2_adjusted_coverage, 
          advi_dep_adjusted_coverage, advi_dep_2_adjusted_coverage) %>%
   melt(id.vars = 'id')
 
 # Boxplots
-cvrmse_box <- ggplot(cvrmse_df) + geom_boxplot(aes(variable, value, fill = variable)) + ylim(c(0,0.5)) + theme_bw() + 
+cvrmse_box <- ggplot(cvrmse_df) + geom_boxplot(aes(variable, value, fill = variable)) + ylim(c(0,1)) + theme_bw() + 
   theme(legend.position = "none") + theme(axis.title.x=element_blank()) + 
   labs(y="CV(RMSE)") + scale_x_discrete(labels=c("nuts_binomial_cvrmse" = "nuts", 
                                                  "nuts_binomial_2_cvrmse" = "nuts_2",
@@ -210,12 +210,12 @@ nmbe_box <- ggplot(nmbe_df) + geom_boxplot(aes(variable, value, fill = variable)
                                              "advi_dep_cvrmse" = "advi",
                                              "advi_dep_2_cvrmse" = "advi_2"))  
 
-cov_box <- ggplot(cov_df) + geom_boxplot(aes(variable, value, fill = variable)) + ylim(c(1,2)) + theme_bw() + 
+cov_box <- ggplot(cov_df) + geom_boxplot(aes(variable, value, fill = variable)) + ylim(c(1,10)) + theme_bw() + 
   theme(legend.position = "none") + theme(axis.title.x=element_blank()) + 
-  labs(y="Adj Coverage") + scale_x_discrete(labels=c("nuts_binomial_cvrmse" = "nuts", 
-                                                     "nuts_binomial_2_cvrmse" = "nuts_2",
-                                                     "advi_dep_cvrmse" = "advi",
-                                                     "advi_dep_2_cvrmse" = "advi_2"))  
+  labs(y="Adj Coverage") + scale_x_discrete(labels=c("nuts_binomial_adjusted_coverage" = "nuts", 
+                                                     "nuts_binomial_2_adjusted_coverage" = "nuts_2",
+                                                     "advi_dep_adjusted_coverage" = "advi",
+                                                     "advi_dep_2_adjusted_coverage" = "advi_2"))  
 
 cvrmse_violin <- ggplot(cvrmse_df) + geom_violin(aes(variable, value, fill = variable), scale = 'count') + ylim(c(0,0.5)) + theme_bw() + 
   theme(legend.position = "none") + theme(axis.title.x=element_blank()) + 
@@ -231,7 +231,7 @@ nmbe_violin <- ggplot(nmbe_df) + geom_violin(aes(variable, value, fill = variabl
                                              "advi_dep_cvrmse" = "advi",
                                              "advi_dep_2_cvrmse" = "advi_2"))  
 
-cov_violin <- ggplot(cov_df) + geom_violin(aes(variable, value, fill = variable), scale = 'count') + ylim(c(1,1.5)) + theme_bw() + 
+cov_violin <- ggplot(cov_df) + geom_violin(aes(variable, value, fill = variable), scale = 'count') + ylim(c(1,10)) + theme_bw() + 
   theme(legend.position = "none") + theme(axis.title.x=element_blank()) + 
   labs(y="Adj Coverage") + scale_x_discrete(labels=c("nuts_binomial_cvrmse" = "nuts", 
                                                      "nuts_binomial_2_cvrmse" = "nuts_2",
@@ -255,3 +255,25 @@ df$advi_improvement <- ifelse(df$nuts_better == 'no', df$nuts_binomial_cvrmse - 
 mean(df[df$nuts_binomial_cvrmse<1, ]$nuts_improvement, na.rm= T)
 mean(df[df$advi_dep_cvrmse<1, ]$advi_improvement, na.rm= T)
 
+# Import iteration 6 (ADVI with uniform prior on temperatures 10-25 )
+df <- fread("Nextcloud/PhD-Benedetto/Bayesian/data/results/bayes_results_iteration_6.csv")
+
+advi_cvrmse <- ggplot(df) + geom_boxplot(aes(advi_dep_cvrmse)) + xlim(0,0.6) + coord_flip() + theme_bw()
+advi_cov <- ggplot(df) + geom_boxplot(aes(advi_dep_adjusted_coverage)) + xlim(1, 4) + coord_flip() + theme_bw()
+
+grid.arrange(cvrmse_box, advi_cvrmse, ncol = 2 )
+grid.arrange(cov_box, advi_cov, ncol = 2)
+
+df_merged <- left_join(df_old, df, by = 'id')
+
+ggplot(df_merged) + geom_boxplot(aes(advi_dep_adjusted_coverage.x))+ xlim(1,2.5) + coord_flip() + theme_bw()
+
+grid.arrange(cvrmse_box,
+             ggplot(df_merged) + geom_boxplot(aes(advi_dep_cvrmse.y))+ xlim(0,1) + coord_flip() + theme_bw(), ncol = 2)
+
+grid.arrange(cov_box,
+             ggplot(df_merged) + geom_boxplot(aes(advi_dep_adjusted_coverage.y))+ xlim(1,10) + coord_flip() + theme_bw(), ncol = 2)
+
+# Which buildings were not calculated?
+
+ids <- metadata[!metadata$building_id %in% df$id & metadata$electricity == 'Yes', 'building_id']

@@ -15,19 +15,21 @@ library(kernlab)
 library(igraph)
 library(nnet)
 # setwd("/Users/beegroup/Github/Bayes-M&V/")
-#setwd("/Users/benedetto/Github/Bayesian-Measurement-and-Verification//")
+#setwd("/Users/benedetto/Github/Bayesian-Measurement-and-Verification/")
 setwd("/root/benedetto/Bayesian-Measurement-and-Verification")
 source("preprocessing/functions_updated.R")
 
 a <- commandArgs(trailingOnly = T)
 df <- read.csv(paste0("/root/benedetto/results/buildings/", a[1],".csv"), stringsAsFactors = F)
 #df <- read.csv("/Users/beegroup/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Fox_education_Ollie.csv", stringsAsFactors = F)
-#df <- read.csv("/Users/benedetto/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Rat_education_Mona.csv", stringsAsFactors = F)
+#df <- read.csv("/Users/benedetto/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Panther_education_Annetta.csv", stringsAsFactors = F)
+# df <- read.csv("/Users/benedetto/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Panther_education_Ivan.csv", stringsAsFactors = F)
 
 id = 'multilevel_hourly'
 df$t <- as.POSIXct(df$t,tz="Europe/Madrid", format = "%Y-%m-%d %H:%M:%S")
 df <- df[complete.cases(df$t),]
 print(getwd())
+
 clustering <- clustering_load_curves(
   df = df[df$t<as.POSIXct("2017-01-01"),],
   tz_local = "Europe/Madrid",
@@ -38,12 +40,70 @@ clustering <- clustering_load_curves(
   kmax=30,
   n_dayparts = 24,
   norm_specs = NULL,
-  input_vars = c("load_curves", "days_weekend", "day_of_the_year"), # POSSIBLE INPUTS: c("load_curves", "days_weekend", "days_of_the_week", "daily_cons", "daily_temp"),
+  input_vars = c("load_curves","days_weekend", "day_of_the_year"), # POSSIBLE INPUTS: c("load_curves", "days_weekend", "days_of_the_week", "daily_cons", "daily_temp"),
   centroids_plot_file = paste0(a[1], "_clustering.pdf"),
   plot_n_centroids_per_row=3,
   filename_prefix="",
   folder_plots= "/root/benedetto/results/plots/clustering_plots/"
 )
+
+if(nrow(clustering$centroids)==1){
+  clustering <- clustering_load_curves(
+    df = df[df$t<as.POSIXct("2017-01-01"),],
+    tz_local = "Europe/Madrid",
+    time_column = "t",
+    value_column = "total_electricity",
+    temperature_column = "outdoor_temp",
+    perc_cons = T,
+    kmax=30,
+    n_dayparts = 24,
+    norm_specs = NULL,
+    input_vars = c("load_curves", "day_of_the_year"), # POSSIBLE INPUTS: c("load_curves", "days_weekend", "days_of_the_week", "daily_cons", "daily_temp"),
+    centroids_plot_file = paste0(a[1], "_clustering.pdf"),
+    plot_n_centroids_per_row=3,
+    filename_prefix="",
+    folder_plots= "/root/benedetto/results/plots/clustering_plots/"
+  )
+}
+
+if(nrow(clustering$centroids)==1){
+  clustering <- clustering_load_curves(
+    df = df[df$t<as.POSIXct("2017-01-01"),],
+    tz_local = "Europe/Madrid",
+    time_column = "t",
+    value_column = "total_electricity",
+    temperature_column = "outdoor_temp",
+    perc_cons = T,
+    kmax=30,
+    n_dayparts = 4,
+    norm_specs = NULL,
+    input_vars = c("min_cons", "max_cons", "daily_cons"), # POSSIBLE INPUTS: c("load_curves", "days_weekend", "days_of_the_week", "daily_cons", "daily_temp"),
+    centroids_plot_file = paste0(a[1], "_clustering.pdf"),
+    plot_n_centroids_per_row=3,
+    filename_prefix="",
+    folder_plots= "/root/benedetto/results/plots/clustering_plots/"
+  )
+}
+
+if(nrow(clustering$centroids)==1){
+  clustering <- clustering_load_curves(
+    df = df[df$t<as.POSIXct("2017-01-01"),],
+    tz_local = "Europe/Madrid",
+    time_column = "t",
+    value_column = "total_electricity",
+    temperature_column = "outdoor_temp",
+    perc_cons = T,
+    kmax=30,
+    n_dayparts = 4,
+    norm_specs = NULL,
+    input_vars = c("max_cons", "daily_cons"), # POSSIBLE INPUTS: c("load_curves", "days_weekend", "days_of_the_week", "daily_cons", "daily_temp"),
+    centroids_plot_file = paste0(a[1], "_clustering.pdf"),
+    plot_n_centroids_per_row=3,
+    filename_prefix="",
+    folder_plots= "/root/benedetto/results/plots/clustering_plots/"
+  )
+}
+
 
 df_centroids <- reshape2::melt(clustering$centroids,id_vars=c("s"))
 colnames(df_centroids) <- c("s","dayhour","value")

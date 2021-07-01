@@ -191,7 +191,11 @@ norm_load_curves <- function(df,tz_local,time_column="t",value_column="v",temper
     "daypart"=ceiling(hour(with_tz(df_agg[,time_column], tz=tz_local))/(24/n_dayparts)),
     stringsAsFactors = F
   )
-  df_agg_d <- smartAgg(df_agg,"day",function(x){mean(x,na.rm=T)*24},"value",function(x){mean(x,na.rm=T)},"temperature",catN = F)
+  df_agg_d <- smartAgg(df_agg,"day",function(x){mean(x,na.rm=T)*24},"value",
+                       function(x){max(x,na.rm=T)},"value",
+                       function(x){min(x,na.rm=T)},"value",
+                       function(x){mean(x,na.rm=T)},"temperature",catN = F)
+  colnames(df_agg_d) <- c("day", "value", "max_value", "min_value", "temperature")
   df_agg <- df_agg[!duplicated(df_agg[,c("dayhour","day")]),]
   
   if(n_dayparts==24){
@@ -205,6 +209,8 @@ norm_load_curves <- function(df,tz_local,time_column="t",value_column="v",temper
   
   df_spread <- merge(df_spread,df_agg_d,by="day")
   days <- df_spread[,"day"]
+  max_cons <- df_spread[,"max_value"]
+  min_cons <- df_spread[,"min_value"]
   daily_cons <- df_spread[,"value"]
   daily_temp <- df_spread[,"temperature"]
   days_of_the_week <- as.numeric(strftime(days,"%u"))
@@ -649,7 +655,8 @@ clustering_load_curves <- function(df, tz_local, time_column, value_column, temp
   evL <- eigen(U, symmetric=TRUE)
   evSpectrum <- log(rev(evL$values)[1:kmax]+1e-12)
   evSpectrum <- evSpectrum - lag(evSpectrum,1)
-  k <- which.max(evSpectrum) - 1
+  # k <- max(2, which.max(evSpectrum) - 1)
+  k <-  which.max(evSpectrum) - 1
   spectral_clust <- tryCatch({
     specc(input_clust$norm_df, centers=k)
   }, error=function(e){
