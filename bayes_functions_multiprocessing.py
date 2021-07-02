@@ -408,6 +408,635 @@ def bayesian_model_comparison_test_2 (df, building_id):
     export_df = pd.DataFrame(data=export_data)
     return export_df
 
+def bayesian_model_comparison_test_3 (df, building_id):
+    #df = pd.read_csv("/root/benedetto/results/buildings/Crow_education_Keisha_preprocess.csv")
+    #df = pd.read_csv("/Users/benedetto/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Fox_education_Ollie_preprocess.csv")
+    # Preprocess
+    df["log_v"] = log_electricity = np.log(df["total_electricity"]).values
+
+    # Create local variables (assign daypart, cluster and weekday values need to start from 0)
+    # clusters are use profile categories, heat_clusters and cool_clusters indicate days having similar
+    # temperature dependence (likely to modify this in the new version of the preprocessing)
+
+    df.t = pd.to_datetime(pd.Series(df.t))
+    df.s = df.s - 1
+
+    # Create training and test set (for the ashrae data training is 2016, test is 2017)
+    train_df = df.loc[df["t"] <= pd.to_datetime("2017-01-01")]
+    test_df = df.loc[df["t"] > pd.to_datetime("2017-01-01")]
+
+    # Define Training variables
+    total_electricity_train = train_df.total_electricity.values
+    log_electricity_train = train_df['log_v']
+    clusters_train = train_df.s
+    unique_clusters = clusters_train.unique()
+    dayparts_train = train_df.daypart
+    unique_dayparts = dayparts_train.unique()
+    outdoor_temp_train = train_df.outdoor_temp
+    daypart_fs_sin_1_train = train_df.daypart_fs_sin_1
+    daypart_fs_sin_2_train = train_df.daypart_fs_sin_2
+    daypart_fs_sin_3_train = train_df.daypart_fs_sin_3
+    daypart_fs_cos_1_train = train_df.daypart_fs_cos_1
+    daypart_fs_cos_2_train = train_df.daypart_fs_cos_2
+    daypart_fs_cos_3_train = train_df.daypart_fs_cos_3
+    yearpart_fs_sin_1_train = train_df.yearpart_fs_sin_1
+    yearpart_fs_sin_2_train = train_df.yearpart_fs_sin_2
+    yearpart_fs_sin_3_train = train_df.yearpart_fs_sin_3
+    yearpart_fs_cos_1_train = train_df.yearpart_fs_cos_1
+    yearpart_fs_cos_2_train = train_df.yearpart_fs_cos_2
+    yearpart_fs_cos_3_train = train_df.yearpart_fs_cos_3
+
+    # Define test variables
+    clusters_test = test_df.s
+    dayparts_test = test_df.daypart
+    outdoor_temp_test = test_df.outdoor_temp
+
+    daypart_fs_sin_1_test = test_df.daypart_fs_sin_1
+    daypart_fs_sin_2_test = test_df.daypart_fs_sin_2
+    daypart_fs_sin_3_test = test_df.daypart_fs_sin_3
+    daypart_fs_cos_1_test = test_df.daypart_fs_cos_1
+    daypart_fs_cos_2_test = test_df.daypart_fs_cos_2
+    daypart_fs_cos_3_test = test_df.daypart_fs_cos_3
+    yearpart_fs_sin_1_test = test_df.yearpart_fs_sin_1
+    yearpart_fs_sin_2_test = test_df.yearpart_fs_sin_2
+    yearpart_fs_sin_3_test = test_df.yearpart_fs_sin_3
+    yearpart_fs_cos_1_test = test_df.yearpart_fs_cos_1
+    yearpart_fs_cos_2_test = test_df.yearpart_fs_cos_2
+    yearpart_fs_cos_3_test = test_df.yearpart_fs_cos_3
+
+    # create coords for pymc3
+    coords = {"obs_id": np.arange(total_electricity_train.size)}
+    coords["profile_cluster"] = unique_clusters
+    coords["daypart"] = unique_dayparts
+
+    # Model 1 ADVI dep
+
+    with pm.Model(coords=coords) as model_3:
+        profile_cluster_idx = pm.Data("profile_cluster_idx", clusters_train, dims="obs_id")
+        daypart = pm.Data("daypart", dayparts_train, dims="obs_id")
+
+        dp_fs_sin_1 = pm.Data("dp_fs_sin_1", daypart_fs_sin_1_train, dims="obs_id")
+        dp_fs_sin_2 = pm.Data("dp_fs_sin_2", daypart_fs_sin_2_train, dims="obs_id")
+        dp_fs_sin_3 = pm.Data("dp_fs_sin_3", daypart_fs_sin_3_train, dims="obs_id")
+
+        dp_fs_cos_1 = pm.Data("dp_fs_cos_1", daypart_fs_cos_1_train, dims="obs_id")
+        dp_fs_cos_2 = pm.Data("dp_fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
+        dp_fs_cos_3 = pm.Data("dp_fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
+
+        yp_fs_sin_1 = pm.Data("yp_fs_sin_1", yearpart_fs_sin_1_train, dims="obs_id")
+        yp_fs_sin_2 = pm.Data("yp_fs_sin_2", yearpart_fs_sin_2_train, dims="obs_id")
+        yp_fs_sin_3 = pm.Data("yp_fs_sin_3", yearpart_fs_sin_3_train, dims="obs_id")
+
+        yp_fs_cos_1 = pm.Data("yp_fs_cos_1", yearpart_fs_cos_1_train, dims="obs_id")
+        yp_fs_cos_2 = pm.Data("yp_fs_cos_2", yearpart_fs_cos_2_train, dims="obs_id")
+        yp_fs_cos_3 = pm.Data("yp_fs_cos_3", yearpart_fs_cos_3_train, dims="obs_id")
+
+        outdoor_temp = pm.Data("outdoor_temp", outdoor_temp_train, dims="obs_id")
+
+        # Temperature coefficients:
+
+        btc = pm.HalfNormal("btc", sigma = 1, dims="daypart")
+        bth = pm.HalfNormal("bth", sigma = 1, dims="daypart")
+
+        # Intercept
+        a_cluster = pm.Normal("a_cluster", mu = 0, sigma = 1, dims=("profile_cluster"))
+
+        # Fourier slopes:
+        bsd1 = pm.Normal("bsd1", mu = 0, sigma = 1, dims=("profile_cluster"))
+        bsd2 = pm.Normal("bsd2", mu = 0, sigma = 1, dims=("profile_cluster"))
+        bsd3 = pm.Normal("bsd3",  mu = 0, sigma = 1, dims=("profile_cluster"))
+
+        bcd1 = pm.Normal("bcd1",  mu = 0, sigma = 1, dims=("profile_cluster"))
+        bcd2 = pm.Normal("bcd2",  mu = 0, sigma = 1, dims=("profile_cluster"))
+        bcd3 = pm.Normal("bcd3",  mu = 0, sigma = 1, dims=("profile_cluster"))
+
+        bsy1 = pm.Normal("bsy1", mu=0, sigma=1, dims=("profile_cluster"))
+        bsy2 = pm.Normal("bsy2", mu=0, sigma=1, dims=("profile_cluster"))
+        bsy3 = pm.Normal("bsy3", mu=0, sigma=1, dims=("profile_cluster"))
+
+        bcy1 = pm.Normal("bcy1", mu=0, sigma=1, dims=("profile_cluster"))
+        bcy2 = pm.Normal("bcy2", mu=0, sigma=1, dims=("profile_cluster"))
+        bcy3 = pm.Normal("bcy3", mu=0, sigma=1, dims=("profile_cluster"))
+
+        # Balance temperatures
+        tbal_h = pm.Uniform("tbal_h", lower = 8, upper = 30)
+        tbal_c = pm.Uniform("tbal_c", lower = 8, upper = 30)
+
+        # Dependence
+        dep_h = pm.Uniform("dep_h", lower=0, upper=1, dims="profile_cluster")
+        dep_c = pm.Uniform("dep_c", lower=0, upper=1, dims="profile_cluster")
+
+        # Expected value per county:
+        mu = a_cluster[profile_cluster_idx] + bsd1[profile_cluster_idx] * dp_fs_sin_1 + \
+             bsd2[profile_cluster_idx] * dp_fs_sin_2 + bsd3[profile_cluster_idx] * dp_fs_sin_3 + \
+             bcd1[profile_cluster_idx] * dp_fs_cos_1 + bcd2[profile_cluster_idx] * dp_fs_cos_2 + \
+             bcd3[profile_cluster_idx] * dp_fs_cos_3 + \
+             bsy1[profile_cluster_idx] * yp_fs_sin_1 + \
+             bsy2[profile_cluster_idx] * yp_fs_sin_2 + bsy3[profile_cluster_idx] * yp_fs_sin_3 + \
+             bcy1[profile_cluster_idx] * yp_fs_cos_1 + bcy2[profile_cluster_idx] * yp_fs_cos_2 + \
+             bcy3[profile_cluster_idx] * yp_fs_cos_3 + \
+             btc[daypart] * (outdoor_temp - tbal_c) * ((outdoor_temp - tbal_c) > 0) * (
+                     dep_c[profile_cluster_idx] > 0.5) + \
+             bth[daypart] * (tbal_h - outdoor_temp) * ((tbal_h - outdoor_temp) > 0) * (
+                     dep_h[profile_cluster_idx] > 0.5)
+
+        # Model error:
+        sigma = pm.Exponential("sigma", 1.0)
+
+        # Likelihood
+        y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity_train, dims="obs_id")
+
+        # Fitting
+    with model_3:
+        approx_dep = pm.fit(n=50000,
+                        method='fullrank_advi',
+                        callbacks=[CheckParametersConvergence(tolerance=0.01)])
+        model_3_trace = approx_dep.sample(5000)
+
+        # Sampling from the posterior setting test data to check the predictions on unseen data
+
+    with model_3:
+        pm.set_data({"profile_cluster_idx": clusters_test,
+                     "daypart": dayparts_test,
+                     "dp_fs_sin_1": daypart_fs_sin_1_test,
+                     "dp_fs_sin_2": daypart_fs_sin_2_test,
+                     "dp_fs_sin_3": daypart_fs_sin_3_test,
+                     "dp_fs_cos_1": daypart_fs_cos_1_test,
+                     "dp_fs_cos_2": daypart_fs_cos_2_test,
+                     "dp_fs_cos_3": daypart_fs_cos_3_test,
+                     "yp_fs_sin_1": yearpart_fs_sin_1_test,
+                     "yp_fs_sin_2": yearpart_fs_sin_2_test,
+                     "yp_fs_sin_3": yearpart_fs_sin_3_test,
+                     "yp_fs_cos_1": yearpart_fs_cos_1_test,
+                     "yp_fs_cos_2": yearpart_fs_cos_2_test,
+                     "yp_fs_cos_3": yearpart_fs_cos_3_test,
+                     "outdoor_temp": outdoor_temp_test
+                     })
+
+        model_3_posterior_hdi = pm.sample_posterior_predictive(model_3_trace, keep_size=True)
+        model_3_posterior = pm.sample_posterior_predictive(model_3_trace)
+        model_3_prior = pm.sample_prior_predictive(150)
+
+        # save traceplots here
+
+        # Debugging ADVI to understand if the estimation is converging
+
+    az.plot_trace(model_3_trace['tbal_h'][None, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_h.png')
+    az.plot_trace(model_3_trace['tbal_c'][None, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_c.png')
+    az.plot_trace(model_3_trace['bth'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_bth.png')
+    az.plot_trace(model_3_trace['btc'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_btc.png')
+    az.plot_trace(model_3_trace['dep_h'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_h.png')
+    az.plot_trace(model_3_trace['dep_c'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_c.png')
+
+    # Calculate predictions and HDI
+
+    model_3_predictions = np.exp(model_3_posterior['y'].mean(0))
+    hdi_data = az.hdi(model_3_posterior_hdi)
+    model_3_lower_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='lower'))).flatten()
+    model_3_higher_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='higher'))).flatten()
+
+    # Calculate adjusted coverage
+    model_3_gamma = np.where(test_df.total_electricity > model_3_higher_bound,
+                              1 + ((test_df.total_electricity - model_3_higher_bound) / (
+                                  test_df.total_electricity)),
+                              np.where(test_df.total_electricity < model_3_lower_bound,
+                                       1 + ((model_3_lower_bound - test_df.total_electricity) / (
+                                           test_df.total_electricity)),
+                                       1))
+
+    model_3_adjusted_coverage = np.nanmean(
+        model_3_gamma * (model_3_higher_bound) / (model_3_lower_bound))
+
+    # Calculate cvrmse and coverage of the HDI
+    model_3_mse = mean_squared_error(test_df.total_electricity, model_3_predictions)
+    model_3_rmse = sqrt(model_3_mse)
+    model_3_cvrmse = model_3_rmse / test_df.total_electricity.mean()
+    model_3_coverage = sum((model_3_lower_bound <= test_df.total_electricity) & (
+            test_df.total_electricity <= model_3_higher_bound)) * 100 / len(test_df)
+    model_3_confidence_length = sum(model_3_higher_bound) - sum(model_3_lower_bound)
+
+    # Calculate NMBE
+    model_3_nmbe = np.sum(test_df.total_electricity - model_3_predictions) * 100 / len(
+        test_df) / test_df.total_electricity.mean()
+
+    # Print df
+    mod_3_data = {'t': test_df['t'],
+               'prediction': model_3_predictions,
+               'lower_bound': model_3_lower_bound,
+               'higher_bound': model_3_higher_bound}
+
+    mod_3_results = pd.DataFrame(data=mod_3_data)
+    mod_3_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_mod_3.csv", index=False)
+
+    export_data = {'mod_3_cvrmse': [model_3_cvrmse],
+                   'mod_3_adjusted_coverage': [model_3_adjusted_coverage],
+                   'mod_3_nmbe': [model_3_nmbe],
+                   'id': building_id}
+
+    export_df = pd.DataFrame(data=export_data)
+    return export_df
+
+def bayesian_model_comparison_test_4 (df, building_id):
+    #df = pd.read_csv("/root/benedetto/results/buildings/Crow_education_Keisha_preprocess.csv")
+    #df = pd.read_csv("/Users/benedetto/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Fox_education_Ollie_preprocess.csv")
+    # Preprocess
+    df["log_v"] = log_electricity = np.log(df["total_electricity"]).values
+
+    # Create local variables (assign daypart, cluster and weekday values need to start from 0)
+    # clusters are use profile categories, heat_clusters and cool_clusters indicate days having similar
+    # temperature dependence (likely to modify this in the new version of the preprocessing)
+
+    df.t = pd.to_datetime(pd.Series(df.t))
+    df.s = df.s - 1
+
+    # Create training and test set (for the ashrae data training is 2016, test is 2017)
+    train_df = df.loc[df["t"] <= pd.to_datetime("2017-01-01")]
+    test_df = df.loc[df["t"] > pd.to_datetime("2017-01-01")]
+
+    # Define Training variables
+    total_electricity_train = train_df.total_electricity.values
+    log_electricity_train = train_df['log_v']
+    clusters_train = train_df.s
+    unique_clusters = clusters_train.unique()
+    dayparts_train = train_df.daypart
+    unique_dayparts = dayparts_train.unique()
+    outdoor_temp_train = train_df.outdoor_temp
+    daypart_fs_sin_1_train = train_df.daypart_fs_sin_1
+    daypart_fs_sin_2_train = train_df.daypart_fs_sin_2
+    daypart_fs_sin_3_train = train_df.daypart_fs_sin_3
+    daypart_fs_cos_1_train = train_df.daypart_fs_cos_1
+    daypart_fs_cos_2_train = train_df.daypart_fs_cos_2
+    daypart_fs_cos_3_train = train_df.daypart_fs_cos_3
+    yearpart_fs_sin_1_train = train_df.yearpart_fs_sin_1
+    yearpart_fs_sin_2_train = train_df.yearpart_fs_sin_2
+    yearpart_fs_sin_3_train = train_df.yearpart_fs_sin_3
+    yearpart_fs_cos_1_train = train_df.yearpart_fs_cos_1
+    yearpart_fs_cos_2_train = train_df.yearpart_fs_cos_2
+    yearpart_fs_cos_3_train = train_df.yearpart_fs_cos_3
+
+    # Define test variables
+    clusters_test = test_df.s
+    dayparts_test = test_df.daypart
+    outdoor_temp_test = test_df.outdoor_temp
+
+    daypart_fs_sin_1_test = test_df.daypart_fs_sin_1
+    daypart_fs_sin_2_test = test_df.daypart_fs_sin_2
+    daypart_fs_sin_3_test = test_df.daypart_fs_sin_3
+    daypart_fs_cos_1_test = test_df.daypart_fs_cos_1
+    daypart_fs_cos_2_test = test_df.daypart_fs_cos_2
+    daypart_fs_cos_3_test = test_df.daypart_fs_cos_3
+    yearpart_fs_sin_1_test = test_df.yearpart_fs_sin_1
+    yearpart_fs_sin_2_test = test_df.yearpart_fs_sin_2
+    yearpart_fs_sin_3_test = test_df.yearpart_fs_sin_3
+    yearpart_fs_cos_1_test = test_df.yearpart_fs_cos_1
+    yearpart_fs_cos_2_test = test_df.yearpart_fs_cos_2
+    yearpart_fs_cos_3_test = test_df.yearpart_fs_cos_3
+
+    # create coords for pymc3
+    coords = {"obs_id": np.arange(total_electricity_train.size)}
+    coords["profile_cluster"] = unique_clusters
+    coords["daypart"] = unique_dayparts
+
+    with pm.Model(coords=coords) as model_4_np_advi:
+        profile_cluster_idx = pm.Data("profile_cluster_idx", clusters_train, dims="obs_id")
+        daypart = pm.Data("daypart", dayparts_train, dims="obs_id")
+
+        dp_fs_sin_1 = pm.Data("dp_fs_sin_1", daypart_fs_sin_1_train, dims="obs_id")
+        dp_fs_sin_2 = pm.Data("dp_fs_sin_2", daypart_fs_sin_2_train, dims="obs_id")
+        dp_fs_sin_3 = pm.Data("dp_fs_sin_3", daypart_fs_sin_3_train, dims="obs_id")
+
+        dp_fs_cos_1 = pm.Data("dp_fs_cos_1", daypart_fs_cos_1_train, dims="obs_id")
+        dp_fs_cos_2 = pm.Data("dp_fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
+        dp_fs_cos_3 = pm.Data("dp_fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
+
+        yp_fs_sin_1 = pm.Data("yp_fs_sin_1", yearpart_fs_sin_1_train, dims="obs_id")
+        yp_fs_sin_2 = pm.Data("yp_fs_sin_2", yearpart_fs_sin_2_train, dims="obs_id")
+        yp_fs_sin_3 = pm.Data("yp_fs_sin_3", yearpart_fs_sin_3_train, dims="obs_id")
+
+        yp_fs_cos_1 = pm.Data("yp_fs_cos_1", yearpart_fs_cos_1_train, dims="obs_id")
+        yp_fs_cos_2 = pm.Data("yp_fs_cos_2", yearpart_fs_cos_2_train, dims="obs_id")
+        yp_fs_cos_3 = pm.Data("yp_fs_cos_3", yearpart_fs_cos_3_train, dims="obs_id")
+
+        outdoor_temp = pm.Data("outdoor_temp", outdoor_temp_train, dims="obs_id")
+
+        # Temperature coefficients:
+
+        btc = pm.HalfNormal("btc", sigma = 1, dims="daypart")
+        bth = pm.HalfNormal("bth", sigma = 1, dims="daypart")
+
+        # Intercept
+        a_cluster = pm.Normal("a_cluster", mu = 0, sigma = 1, dims=("profile_cluster"))
+
+        # Fourier slopes:
+        bsd1 = pm.Normal("bsd1", mu = 0, sigma = 1, dims=("profile_cluster"))
+        bsd2 = pm.Normal("bsd2", mu = 0, sigma = 1, dims=("profile_cluster"))
+        bsd3 = pm.Normal("bsd3",  mu = 0, sigma = 1, dims=("profile_cluster"))
+
+        bcd1 = pm.Normal("bcd1",  mu = 0, sigma = 1, dims=("profile_cluster"))
+        bcd2 = pm.Normal("bcd2",  mu = 0, sigma = 1, dims=("profile_cluster"))
+        bcd3 = pm.Normal("bcd3",  mu = 0, sigma = 1, dims=("profile_cluster"))
+
+        bsy1 = pm.Normal("bsy1", mu=0, sigma=1, dims=("profile_cluster"))
+        bsy2 = pm.Normal("bsy2", mu=0, sigma=1, dims=("profile_cluster"))
+        bsy3 = pm.Normal("bsy3", mu=0, sigma=1, dims=("profile_cluster"))
+
+        bcy1 = pm.Normal("bcy1", mu=0, sigma=1, dims=("profile_cluster"))
+        bcy2 = pm.Normal("bcy2", mu=0, sigma=1, dims=("profile_cluster"))
+        bcy3 = pm.Normal("bcy3", mu=0, sigma=1, dims=("profile_cluster"))
+
+        # Balance temperatures
+        tbal_h = pm.Uniform("tbal_h", lower = 8, upper = 30)
+        tbal_c = pm.Uniform("tbal_c", lower = 8, upper = 30)
+
+        # Dependence
+        dep_h = pm.Uniform("dep_h", lower=0, upper=1, dims="profile_cluster")
+        dep_c = pm.Uniform("dep_c", lower=0, upper=1, dims="profile_cluster")
+
+        # Expected value per county:
+        mu = a_cluster[profile_cluster_idx] + bsd1[profile_cluster_idx] * dp_fs_sin_1 + \
+             bsd2[profile_cluster_idx] * dp_fs_sin_2 + bsd3[profile_cluster_idx] * dp_fs_sin_3 + \
+             bcd1[profile_cluster_idx] * dp_fs_cos_1 + bcd2[profile_cluster_idx] * dp_fs_cos_2 + \
+             bcd3[profile_cluster_idx] * dp_fs_cos_3 + \
+             bsy1[profile_cluster_idx] * yp_fs_sin_1 + \
+             bsy2[profile_cluster_idx] * yp_fs_sin_2 + bsy3[profile_cluster_idx] * yp_fs_sin_3 + \
+             bcy1[profile_cluster_idx] * yp_fs_cos_1 + bcy2[profile_cluster_idx] * yp_fs_cos_2 + \
+             bcy3[profile_cluster_idx] * yp_fs_cos_3 + \
+             btc[daypart] * (outdoor_temp - tbal_c) * ((outdoor_temp - tbal_c) > 0) * (
+                     dep_c[profile_cluster_idx] > 0.5) + \
+             bth[daypart] * (tbal_h - outdoor_temp) * ((tbal_h - outdoor_temp) > 0) * (
+                     dep_h[profile_cluster_idx] > 0.5)
+
+        # Model error:
+        sigma = pm.Exponential("sigma", 1.0)
+
+        # Likelihood
+        y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity_train, dims="obs_id")
+
+    with model_4_np_advi:
+        model_4_np_advi_approx = pm.fit(n=50000,
+                        method='fullrank_advi',
+                        callbacks=[CheckParametersConvergence(tolerance=0.01)])
+        model_4_np_advi_trace = model_4_np_advi_approx.sample(5000)
+
+        # Sampling from the posterior setting test data to check the predictions on unseen data
+
+    with model_4_np_advi:
+        pm.set_data({"profile_cluster_idx": clusters_test,
+                     "daypart": dayparts_test,
+                     "dp_fs_sin_1": daypart_fs_sin_1_test,
+                     "dp_fs_sin_2": daypart_fs_sin_2_test,
+                     "dp_fs_sin_3": daypart_fs_sin_3_test,
+                     "dp_fs_cos_1": daypart_fs_cos_1_test,
+                     "dp_fs_cos_2": daypart_fs_cos_2_test,
+                     "dp_fs_cos_3": daypart_fs_cos_3_test,
+                     "yp_fs_sin_1": yearpart_fs_sin_1_test,
+                     "yp_fs_sin_2": yearpart_fs_sin_2_test,
+                     "yp_fs_sin_3": yearpart_fs_sin_3_test,
+                     "yp_fs_cos_1": yearpart_fs_cos_1_test,
+                     "yp_fs_cos_2": yearpart_fs_cos_2_test,
+                     "yp_fs_cos_3": yearpart_fs_cos_3_test,
+                     "outdoor_temp": outdoor_temp_test
+                     })
+
+        model_4_np_advi_posterior_hdi = pm.sample_posterior_predictive(model_4_np_advi_trace, keep_size=True)
+        model_4_np_advi_posterior = pm.sample_posterior_predictive(model_4_np_advi_trace)
+        # model_4_np_advi_prior = pm.sample_prior_predictive(150)
+
+        # save traceplots here
+
+        # Debugging ADVI to understand if the estimation is converging
+
+    az.plot_trace(model_4_np_advi_trace['tbal_h'][None, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_h_np_advi.png')
+    az.plot_trace(model_4_np_advi_trace['tbal_c'][None, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_c_np_advi.png')
+    az.plot_trace(model_4_np_advi_trace['bth'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_bth_np_advi.png')
+    az.plot_trace(model_4_np_advi_trace['btc'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_btc_np_advi.png')
+    az.plot_trace(model_4_np_advi_trace['dep_h'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_h_np_advi.png')
+    az.plot_trace(model_4_np_advi_trace['dep_c'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_c_np_advi.png')
+
+    # Calculate predictions and HDI
+
+    model_4_np_advi_predictions = np.exp(model_4_np_advi_posterior['y'].mean(0))
+    hdi_data = az.hdi(model_4_np_advi_posterior_hdi)
+    model_4_np_advi_lower_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='lower'))).flatten()
+    model_4_np_advi_higher_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='higher'))).flatten()
+
+    # Calculate adjusted coverage
+    model_4_np_advi_gamma = np.where(test_df.total_electricity > model_4_np_advi_higher_bound,
+                              1 + ((test_df.total_electricity - model_4_np_advi_higher_bound) / (
+                                  test_df.total_electricity)),
+                              np.where(test_df.total_electricity < model_4_np_advi_lower_bound,
+                                       1 + ((model_4_np_advi_lower_bound - test_df.total_electricity) / (
+                                           test_df.total_electricity)),
+                                       1))
+
+    model_4_np_advi_adjusted_coverage = np.nanmean(
+        model_4_np_advi_gamma * (model_4_np_advi_higher_bound) / (model_4_np_advi_lower_bound))
+
+    # Calculate cvrmse and coverage of the HDI
+    model_4_np_advi_mse = mean_squared_error(test_df.total_electricity, model_4_np_advi_predictions)
+    model_4_np_advi_rmse = sqrt(model_4_np_advi_mse)
+    model_4_np_advi_cvrmse = model_4_np_advi_rmse / test_df.total_electricity.mean()
+    model_4_np_advi_coverage = sum((model_4_np_advi_lower_bound <= test_df.total_electricity) & (
+            test_df.total_electricity <= model_4_np_advi_higher_bound)) * 100 / len(test_df)
+    model_4_np_advi_confidence_length = sum(model_4_np_advi_higher_bound) - sum(model_4_np_advi_lower_bound)
+
+    # Calculate NMBE
+    model_4_np_advi_nmbe = np.sum(test_df.total_electricity - model_4_np_advi_predictions) * 100 / len(
+        test_df) / test_df.total_electricity.mean()
+
+    # Print df
+    mod_4_np_advi_data = {'t': test_df['t'],
+               'prediction': model_4_np_advi_predictions,
+               'lower_bound': model_4_np_advi_lower_bound,
+               'higher_bound': model_4_np_advi_higher_bound}
+
+    mod_4_np_advi_results = pd.DataFrame(data=mod_4_np_advi_data)
+    mod_4_np_advi_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_mod_4_np_advi.csv", index=False)
+
+    with pm.Model(coords=coords) as mode_4_pp_advi:
+        profile_cluster_idx = pm.Data("profile_cluster_idx", clusters_train, dims="obs_id")
+        daypart = pm.Data("daypart", dayparts_train, dims="obs_id")
+
+        dp_fs_sin_1 = pm.Data("dp_fs_sin_1", daypart_fs_sin_1_train, dims="obs_id")
+        dp_fs_sin_2 = pm.Data("dp_fs_sin_2", daypart_fs_sin_2_train, dims="obs_id")
+        dp_fs_sin_3 = pm.Data("dp_fs_sin_3", daypart_fs_sin_3_train, dims="obs_id")
+
+        dp_fs_cos_1 = pm.Data("dp_fs_cos_1", daypart_fs_cos_1_train, dims="obs_id")
+        dp_fs_cos_2 = pm.Data("dp_fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
+        dp_fs_cos_3 = pm.Data("dp_fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
+
+        yp_fs_sin_1 = pm.Data("yp_fs_sin_1", yearpart_fs_sin_1_train, dims="obs_id")
+        yp_fs_sin_2 = pm.Data("yp_fs_sin_2", yearpart_fs_sin_2_train, dims="obs_id")
+        yp_fs_sin_3 = pm.Data("yp_fs_sin_3", yearpart_fs_sin_3_train, dims="obs_id")
+
+        yp_fs_cos_1 = pm.Data("yp_fs_cos_1", yearpart_fs_cos_1_train, dims="obs_id")
+        yp_fs_cos_2 = pm.Data("yp_fs_cos_2", yearpart_fs_cos_2_train, dims="obs_id")
+        yp_fs_cos_3 = pm.Data("yp_fs_cos_3", yearpart_fs_cos_3_train, dims="obs_id")
+
+        outdoor_temp = pm.Data("outdoor_temp", outdoor_temp_train, dims="obs_id")
+
+        # Hyperpriors
+
+        bf = pm.Normal("bf", mu=0.0, sigma=1.0)
+        sigma_bf = pm.Exponential("sigma_bf", 1.0)
+        a = pm.Normal("a", mu=0.0, sigma=1.0)
+        sigma_a = pm.Exponential("sigma_a", 1.0)
+        sigma_btc = pm.Exponential("sigma_btc", 1.0)
+        sigma_bth = pm.Exponential("sigma_bth", 1.0)
+
+        # Temperature coefficients:
+
+        btc = pm.HalfNormal("btc", sigma = sigma_btc, dims="daypart")
+        bth = pm.HalfNormal("bth", sigma = sigma_bth, dims="daypart")
+
+        # Intercept
+        a_cluster = pm.Normal("a_cluster", mu = a, sigma = sigma_a, dims=("profile_cluster"))
+
+        # Fourier slopes:
+        bsd1 = pm.Normal("bsd1", mu = bf, sigma = sigma_bf, dims=("profile_cluster"))
+        bsd2 = pm.Normal("bsd2", mu = bf, sigma = sigma_bf, dims=("profile_cluster"))
+        bsd3 = pm.Normal("bsd3",  mu = bf, sigma = sigma_bf, dims=("profile_cluster"))
+
+        bcd1 = pm.Normal("bcd1",  mu = bf, sigma = sigma_bf, dims=("profile_cluster"))
+        bcd2 = pm.Normal("bcd2",  mu = bf, sigma = sigma_bf, dims=("profile_cluster"))
+        bcd3 = pm.Normal("bcd3",  mu = bf, sigma = sigma_bf, dims=("profile_cluster"))
+
+        bsy1 = pm.Normal("bsy1", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+        bsy2 = pm.Normal("bsy2", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+        bsy3 = pm.Normal("bsy3", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+
+        bcy1 = pm.Normal("bcy1", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+        bcy2 = pm.Normal("bcy2", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+        bcy3 = pm.Normal("bcy3", mu=bf, sigma=sigma_bf, dims=("profile_cluster"))
+
+        # Balance temperatures
+        tbal_h = pm.Uniform("tbal_h", lower = 8, upper = 30)
+        tbal_c = pm.Uniform("tbal_c", lower = 8, upper = 30)
+
+        # Dependence
+        dep_h = pm.Uniform("dep_h", lower=0, upper=1, dims="profile_cluster")
+        dep_c = pm.Uniform("dep_c", lower=0, upper=1, dims="profile_cluster")
+
+        # Expected value per county:
+        mu = a_cluster[profile_cluster_idx] + bsd1[profile_cluster_idx] * dp_fs_sin_1 + \
+             bsd2[profile_cluster_idx] * dp_fs_sin_2 + bsd3[profile_cluster_idx] * dp_fs_sin_3 + \
+             bcd1[profile_cluster_idx] * dp_fs_cos_1 + bcd2[profile_cluster_idx] * dp_fs_cos_2 + \
+             bcd3[profile_cluster_idx] * dp_fs_cos_3 + \
+             bsy1[profile_cluster_idx] * yp_fs_sin_1 + \
+             bsy2[profile_cluster_idx] * yp_fs_sin_2 + bsy3[profile_cluster_idx] * yp_fs_sin_3 + \
+             bcy1[profile_cluster_idx] * yp_fs_cos_1 + bcy2[profile_cluster_idx] * yp_fs_cos_2 + \
+             bcy3[profile_cluster_idx] * yp_fs_cos_3 + \
+             btc[daypart] * (outdoor_temp - tbal_c) * ((outdoor_temp - tbal_c) > 0) * (
+                     dep_c[profile_cluster_idx] > 0.5) + \
+             bth[daypart] * (tbal_h - outdoor_temp) * ((tbal_h - outdoor_temp) > 0) * (
+                     dep_h[profile_cluster_idx] > 0.5)
+
+        # Model error:
+        sigma = pm.Exponential("sigma", 1.0)
+
+        # Likelihood
+        y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity_train, dims="obs_id")
+
+    with mode_4_pp_advi:
+        mode_4_pp_advi_approx = pm.fit(n=50000,
+                        method='fullrank_advi',
+                        callbacks=[CheckParametersConvergence(tolerance=0.01)])
+        mode_4_pp_advi_trace = mode_4_pp_advi_approx.sample(5000)
+
+        # Sampling from the posterior setting test data to check the predictions on unseen data
+
+    with mode_4_pp_advi:
+        pm.set_data({"profile_cluster_idx": clusters_test,
+                     "daypart": dayparts_test,
+                     "dp_fs_sin_1": daypart_fs_sin_1_test,
+                     "dp_fs_sin_2": daypart_fs_sin_2_test,
+                     "dp_fs_sin_3": daypart_fs_sin_3_test,
+                     "dp_fs_cos_1": daypart_fs_cos_1_test,
+                     "dp_fs_cos_2": daypart_fs_cos_2_test,
+                     "dp_fs_cos_3": daypart_fs_cos_3_test,
+                     "yp_fs_sin_1": yearpart_fs_sin_1_test,
+                     "yp_fs_sin_2": yearpart_fs_sin_2_test,
+                     "yp_fs_sin_3": yearpart_fs_sin_3_test,
+                     "yp_fs_cos_1": yearpart_fs_cos_1_test,
+                     "yp_fs_cos_2": yearpart_fs_cos_2_test,
+                     "yp_fs_cos_3": yearpart_fs_cos_3_test,
+                     "outdoor_temp": outdoor_temp_test
+                     })
+
+        mode_4_pp_advi_posterior_hdi = pm.sample_posterior_predictive(mode_4_pp_advi_trace, keep_size=True)
+        mode_4_pp_advi_posterior = pm.sample_posterior_predictive(mode_4_pp_advi_trace)
+        # mode_4_pp_advi_prior = pm.sample_prior_predictive(150)
+
+        # save traceplots here
+
+        # Debugging ADVI to understand if the estimation is converging
+
+    az.plot_trace(mode_4_pp_advi_trace['tbal_h'][None, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_h_pp_advi.png')
+    az.plot_trace(mode_4_pp_advi_trace['tbal_c'][None, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_c_pp_advi.png')
+    az.plot_trace(mode_4_pp_advi_trace['bth'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_bth_pp_advi.png')
+    az.plot_trace(mode_4_pp_advi_trace['btc'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_btc_pp_advi.png')
+    az.plot_trace(mode_4_pp_advi_trace['dep_h'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_h_pp_advi.png')
+    az.plot_trace(mode_4_pp_advi_trace['dep_c'][None, :, :])
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_c_pp_advi.png')
+
+    # Calculate predictions and HDI
+
+    mode_4_pp_advi_predictions = np.exp(mode_4_pp_advi_posterior['y'].mean(0))
+    hdi_data = az.hdi(mode_4_pp_advi_posterior_hdi)
+    mode_4_pp_advi_lower_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='lower'))).flatten()
+    mode_4_pp_advi_higher_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='higher'))).flatten()
+
+    # Calculate adjusted coverage
+    mode_4_pp_advi_gamma = np.where(test_df.total_electricity > mode_4_pp_advi_higher_bound,
+                              1 + ((test_df.total_electricity - mode_4_pp_advi_higher_bound) / (
+                                  test_df.total_electricity)),
+                              np.where(test_df.total_electricity < mode_4_pp_advi_lower_bound,
+                                       1 + ((mode_4_pp_advi_lower_bound - test_df.total_electricity) / (
+                                           test_df.total_electricity)),
+                                       1))
+
+    mode_4_pp_advi_adjusted_coverage = np.nanmean(
+        mode_4_pp_advi_gamma * (mode_4_pp_advi_higher_bound) / (mode_4_pp_advi_lower_bound))
+
+    # Calculate cvrmse and coverage of the HDI
+    mode_4_pp_advi_mse = mean_squared_error(test_df.total_electricity, mode_4_pp_advi_predictions)
+    mode_4_pp_advi_rmse = sqrt(mode_4_pp_advi_mse)
+    mode_4_pp_advi_cvrmse = mode_4_pp_advi_rmse / test_df.total_electricity.mean()
+    mode_4_pp_advi_coverage = sum((mode_4_pp_advi_lower_bound <= test_df.total_electricity) & (
+            test_df.total_electricity <= mode_4_pp_advi_higher_bound)) * 100 / len(test_df)
+    mode_4_pp_advi_confidence_length = sum(mode_4_pp_advi_higher_bound) - sum(mode_4_pp_advi_lower_bound)
+
+    # Calculate NMBE
+    mode_4_pp_advi_nmbe = np.sum(test_df.total_electricity - mode_4_pp_advi_predictions) * 100 / len(
+        test_df) / test_df.total_electricity.mean()
+
+    # Print df
+    mod_4_pp_advi_data = {'t': test_df['t'],
+               'prediction': mode_4_pp_advi_predictions,
+               'lower_bound': mode_4_pp_advi_lower_bound,
+               'higher_bound': mode_4_pp_advi_higher_bound}
+
+    mod_4_pp_advi_results = pd.DataFrame(data=mod_4_pp_advi_data)
+    mod_4_pp_advi_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_mod_4_pp_advi.csv", index=False)
+
+
 
 def bayesian_model_comparison (df):
     # Preprocess
@@ -1803,7 +2432,7 @@ def multiprocessing_bayesian_comparison(df):
             print('Results for ' + building_id + ' are already calculated. Skipping to next building')
         else:
             try:
-                model_results = bayesian_model_comparison_test_2(df_preprocessed, building_id)
+                model_results = bayesian_model_comparison_test_3(df_preprocessed, building_id)
                 res = pd.read_csv("/root/benedetto/results/bayes_results.csv")
                 final_export = res.append(model_results)
                 final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
@@ -1813,7 +2442,7 @@ def multiprocessing_bayesian_comparison(df):
                 print('Modeling error for ' + building_id + '. Skipping to the next building')
     else:
         try:
-            model_results = bayesian_model_comparison_test_2(df_preprocessed, building_id)
+            model_results = bayesian_model_comparison_test_3(df_preprocessed, building_id)
             final_export = model_results
             final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
         except Exception as e:
