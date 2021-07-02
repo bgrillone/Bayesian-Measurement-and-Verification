@@ -283,7 +283,7 @@ def bayesian_model_comparison_test_2 (df, building_id):
         bth = pm.HalfNormal("bth", sigma = 1, dims="daypart")
 
         # Intercept
-        a_cluster = pm.Normal("a_cluster", lower = 0, upper = 1, dims=("profile_cluster"))
+        a_cluster = pm.Normal("a_cluster", mu = 0, sigma = 1, dims=("profile_cluster"))
 
         # Fourier slopes:
         bsd1 = pm.Normal("bsd1", mu = 0, sigma = 1, dims=("profile_cluster"))
