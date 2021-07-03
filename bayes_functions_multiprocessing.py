@@ -973,8 +973,6 @@ def bayesian_model_comparison_test_4 (df, building_id):
     mod_4_pp_advi_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_mod_4_pp_advi.csv", index=False)
 
     with pm.Model(coords=coords) as model_4_cp_advi:
-        profile_cluster_idx = pm.Data("profile_cluster_idx", clusters_train, dims="obs_id")
-        daypart = pm.Data("daypart", dayparts_train, dims="obs_id")
 
         dp_fs_sin_1 = pm.Data("dp_fs_sin_1", daypart_fs_sin_1_train, dims="obs_id")
         dp_fs_sin_2 = pm.Data("dp_fs_sin_2", daypart_fs_sin_2_train, dims="obs_id")
@@ -1016,9 +1014,9 @@ def bayesian_model_comparison_test_4 (df, building_id):
              bsd2 * dp_fs_sin_2 + bsd3 * dp_fs_sin_3 + \
              bcd1 * dp_fs_cos_1 + bcd2 * dp_fs_cos_2 + \
              bcd3 * dp_fs_cos_3 + \
-             btc[daypart] * (outdoor_temp - tbal_c) * ((outdoor_temp - tbal_c) > 0) * (
+             btc * (outdoor_temp - tbal_c) * ((outdoor_temp - tbal_c) > 0) * (
                      dep_c > 0.5) + \
-             bth[daypart] * (tbal_h - outdoor_temp) * ((tbal_h - outdoor_temp) > 0) * (
+             bth * (tbal_h - outdoor_temp) * ((tbal_h - outdoor_temp) > 0) * (
                      dep_h > 0.5)
 
         # Model error:
@@ -1036,9 +1034,7 @@ def bayesian_model_comparison_test_4 (df, building_id):
         # Sampling from the posterior setting test data to check the predictions on unseen data
 
     with model_4_cp_advi:
-        pm.set_data({"profile_cluster_idx": clusters_test,
-                     "daypart": dayparts_test,
-                     "dp_fs_sin_1": daypart_fs_sin_1_test,
+        pm.set_data({"dp_fs_sin_1": daypart_fs_sin_1_test,
                      "dp_fs_sin_2": daypart_fs_sin_2_test,
                      "dp_fs_sin_3": daypart_fs_sin_3_test,
                      "dp_fs_cos_1": daypart_fs_cos_1_test,
@@ -1385,8 +1381,6 @@ def bayesian_model_comparison_test_4 (df, building_id):
     mod_4_pp_nuts_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_mod_4_pp_nuts.csv", index=False)
 
     with pm.Model(coords=coords) as model_4_cp_nuts:
-        profile_cluster_idx = pm.Data("profile_cluster_idx", clusters_train, dims="obs_id")
-        daypart = pm.Data("daypart", dayparts_train, dims="obs_id")
 
         dp_fs_sin_1 = pm.Data("dp_fs_sin_1", daypart_fs_sin_1_train, dims="obs_id")
         dp_fs_sin_2 = pm.Data("dp_fs_sin_2", daypart_fs_sin_2_train, dims="obs_id")
@@ -1395,14 +1389,6 @@ def bayesian_model_comparison_test_4 (df, building_id):
         dp_fs_cos_1 = pm.Data("dp_fs_cos_1", daypart_fs_cos_1_train, dims="obs_id")
         dp_fs_cos_2 = pm.Data("dp_fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
         dp_fs_cos_3 = pm.Data("dp_fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
-
-        yp_fs_sin_1 = pm.Data("yp_fs_sin_1", yearpart_fs_sin_1_train, dims="obs_id")
-        yp_fs_sin_2 = pm.Data("yp_fs_sin_2", yearpart_fs_sin_2_train, dims="obs_id")
-        yp_fs_sin_3 = pm.Data("yp_fs_sin_3", yearpart_fs_sin_3_train, dims="obs_id")
-
-        yp_fs_cos_1 = pm.Data("yp_fs_cos_1", yearpart_fs_cos_1_train, dims="obs_id")
-        yp_fs_cos_2 = pm.Data("yp_fs_cos_2", yearpart_fs_cos_2_train, dims="obs_id")
-        yp_fs_cos_3 = pm.Data("yp_fs_cos_3", yearpart_fs_cos_3_train, dims="obs_id")
 
         outdoor_temp = pm.Data("outdoor_temp", outdoor_temp_train, dims="obs_id")
 
@@ -1436,8 +1422,8 @@ def bayesian_model_comparison_test_4 (df, building_id):
              bsd2 * dp_fs_sin_2 + bsd3 * dp_fs_sin_3 + \
              bcd1 * dp_fs_cos_1 + bcd2 * dp_fs_cos_2 + \
              bcd3 * dp_fs_cos_3 + \
-             btc[daypart] * (outdoor_temp - tbal_c) * ((outdoor_temp - tbal_c) > 0) * (dep_c) + \
-             bth[daypart] * (tbal_h - outdoor_temp) * ((tbal_h - outdoor_temp) > 0) * (dep_h)
+             btc * (outdoor_temp - tbal_c) * ((outdoor_temp - tbal_c) > 0) * (dep_c) + \
+             bth * (tbal_h - outdoor_temp) * ((tbal_h - outdoor_temp) > 0) * (dep_h)
 
         # Model error:
         sigma = pm.Exponential("sigma", 1.0)
@@ -1451,9 +1437,7 @@ def bayesian_model_comparison_test_4 (df, building_id):
         # Sampling from the posterior setting test data to check the predictions on unseen data
 
     with model_4_cp_nuts:
-        pm.set_data({"profile_cluster_idx": clusters_test,
-                     "daypart": dayparts_test,
-                     "dp_fs_sin_1": daypart_fs_sin_1_test,
+        pm.set_data({"dp_fs_sin_1": daypart_fs_sin_1_test,
                      "dp_fs_sin_2": daypart_fs_sin_2_test,
                      "dp_fs_sin_3": daypart_fs_sin_3_test,
                      "dp_fs_cos_1": daypart_fs_cos_1_test,
