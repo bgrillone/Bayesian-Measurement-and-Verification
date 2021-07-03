@@ -1160,7 +1160,7 @@ def bayesian_model_comparison_test_4 (df, building_id):
         y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity_train, dims="obs_id")
 
     with model_4_np_nuts:
-        model_4_np_nuts_trace = pm.sample(5000, tune = 2000, chains = 4, cores = 4, target_accept=0.9)
+        model_4_np_nuts_trace = pm.sample(5000, tune = 2000, chains = 4, cores = 1, nuts={'target_accept':0.95})
 
         # Sampling from the posterior setting test data to check the predictions on unseen data
 
@@ -1303,7 +1303,7 @@ def bayesian_model_comparison_test_4 (df, building_id):
         y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity_train, dims="obs_id")
 
     with model_4_pp_nuts:
-        model_4_pp_nuts_trace = pm.sample(5000, tune = 2000, chains = 4, cores = 4, target_accept=0.9)
+        model_4_pp_nuts_trace = pm.sample(5000, tune = 2000, chains = 4, cores = 1, nuts={'target_accept':0.95})
 
         # Sampling from the posterior setting test data to check the predictions on unseen data
 
@@ -1432,7 +1432,7 @@ def bayesian_model_comparison_test_4 (df, building_id):
         y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity_train, dims="obs_id")
 
     with model_4_cp_nuts:
-        model_4_cp_nuts_trace = pm.sample(5000, tune = 2000, chains = 4, cores = 4, target_accept=0.9)
+        model_4_cp_nuts_trace = pm.sample(5000, tune = 2000, chains = 4, cores = 1, nuts={'target_accept':0.95})
 
         # Sampling from the posterior setting test data to check the predictions on unseen data
 
