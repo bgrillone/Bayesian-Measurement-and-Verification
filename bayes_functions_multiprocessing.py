@@ -212,7 +212,7 @@ def bayesian_model_comparison_test_1 (df, building_id):
 
 def bayesian_model_comparison_test_2 (df, building_id):
     #df = pd.read_csv("/root/benedetto/results/buildings/Crow_education_Keisha_preprocess.csv")
-    #df = pd.read_csv("/Users/benedetto/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Fox_education_Ollie_preprocess.csv")
+    #df = pd.read_csv("/Users/benedetto/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Rat_lodging_Marguerite_preprocess.csv")
     # Preprocess
     df["log_v"] = log_electricity = np.log(df["total_electricity"]).values
 
@@ -1328,17 +1328,17 @@ def bayesian_model_comparison_test_4 (df, building_id):
         # Debugging ADVI to understand if the estimation is converging
 
     az.plot_trace(model_4_pp_nuts_trace['tbal_h'][None, :])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_h_pp_advi.png')
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_h_pp_nuts.png')
     az.plot_trace(model_4_pp_nuts_trace['tbal_c'][None, :])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_c_pp_advi.png')
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_tbal_c_nuts.png')
     az.plot_trace(model_4_pp_nuts_trace['bth'][None, :, :])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_bth_pp_advi.png')
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_bth_pp_nuts.png')
     az.plot_trace(model_4_pp_nuts_trace['btc'][None, :, :])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_btc_pp_advi.png')
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_btc_pp_nuts.png')
     az.plot_trace(model_4_pp_nuts_trace['dep_h'][None, :, :])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_h_pp_advi.png')
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_h_pp_nuts.png')
     az.plot_trace(model_4_pp_nuts_trace['dep_c'][None, :, :])
-    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_c_pp_advi.png')
+    plt.savefig('/root/benedetto/results/plots/' + building_id + '_dep_c_pp_nuts.png')
 
     # Calculate predictions and HDI
 

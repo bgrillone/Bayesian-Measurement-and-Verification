@@ -655,10 +655,13 @@ clustering_load_curves <- function(df, tz_local, time_column, value_column, temp
   evL <- eigen(U, symmetric=TRUE)
   evSpectrum <- log(rev(evL$values)[1:kmax]+1e-12)
   evSpectrum <- evSpectrum - lag(evSpectrum,1)
-  # k <- max(2, which.max(evSpectrum) - 1)
-  k <-  which.max(evSpectrum) - 1
+  k <- max(2, which.max(evSpectrum) - 1)
+  # k <-  which.max(evSpectrum) - 1
   spectral_clust <- tryCatch({
-    specc(input_clust$norm_df, centers=k)
+    specc(input_clust$norm_df, centers=k,
+          kernel = "polydot", kpar = list(degree=2), 
+          nystrom.red = T, nystrom.sample = nrow(input_clust$norm_df)[1]/6,
+          iterations = 400, mod.sample = 0.75, na.action = na.omit)
   }, error=function(e){
     1
   })
@@ -728,8 +731,9 @@ clustering_load_curves <- function(df, tz_local, time_column, value_column, temp
   if (class(spectral_clust)[1]=="numeric"){
     mod_calendar <- unique(df_structural$s)
   } else {
-    mod_calendar <- multinom(formula = as.factor(s) ~ 0 + as.factor(dayweek), 
-                             data = df_structural)
+    mod_calendar <- multinom(formula = as.factor(s) ~ 1 + as.factor(dayweek), #+ yearpart_fs_sin_1 + yearpart_fs_sin_2 +
+                             #yearpart_fs_cos_1 + yearpart_fs_cos_2
+                             data = df_structural[df_structural[,"time"]>=(max(df_structural[,"time"])-years(1)),])
   }
   
   # df_centroids_spread[,group] <- gr
