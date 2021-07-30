@@ -97,8 +97,8 @@ def bayesian_model_comparison_test_1 (df, building_id):
         bcd3 = pm.Uniform("bcd3", lower = -5, upper = 5, dims=("profile_cluster"))
 
         # Balance temperatures
-        tbal_h = pm.Uniform("tbal_h", lower = 8, upper = 30)
-        tbal_c = pm.Uniform("tbal_c", lower = 8, upper = 30)
+        tbal_h = pm.Uniform("tbal_h", lower = -50, upper = 50)
+        tbal_c = pm.Uniform("tbal_c", lower = -50, upper = 50)
 
         # Dependence
         dep_h = pm.Uniform("dep_h", lower=0, upper=1, dims="profile_cluster")
@@ -115,7 +115,7 @@ def bayesian_model_comparison_test_1 (df, building_id):
                      dep_h[profile_cluster_idx] > 0.5)
 
         # Model error:
-        sigma = pm.Exponential("sigma", 1.0)
+        sigma = pm.Uniform("sigma", lower = -5, upper = 5)
 
         # Likelihood
         y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity_train, dims="obs_id")
@@ -205,6 +205,7 @@ def bayesian_model_comparison_test_1 (df, building_id):
     export_data = {'mod_1_cvrmse': [model_1_cvrmse],
                    'mod_1_adjusted_coverage': [model_1_adjusted_coverage],
                    'mod_1_nmbe': [model_1_nmbe],
+                   'mod_1_cov':[model_1_coverage],
                    'id': building_id}
 
     export_df = pd.DataFrame(data=export_data)
