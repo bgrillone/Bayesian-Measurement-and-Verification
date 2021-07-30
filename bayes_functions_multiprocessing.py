@@ -446,12 +446,12 @@ def bayesian_model_comparison_test_3 (df, building_id):
     daypart_fs_cos_1_train = train_df.daypart_fs_cos_1
     daypart_fs_cos_2_train = train_df.daypart_fs_cos_2
     daypart_fs_cos_3_train = train_df.daypart_fs_cos_3
-    yearpart_fs_sin_1_train = train_df.yearpart_fs_sin_1
-    yearpart_fs_sin_2_train = train_df.yearpart_fs_sin_2
-    yearpart_fs_sin_3_train = train_df.yearpart_fs_sin_3
-    yearpart_fs_cos_1_train = train_df.yearpart_fs_cos_1
-    yearpart_fs_cos_2_train = train_df.yearpart_fs_cos_2
-    yearpart_fs_cos_3_train = train_df.yearpart_fs_cos_3
+    # yearpart_fs_sin_1_train = train_df.yearpart_fs_sin_1
+    # yearpart_fs_sin_2_train = train_df.yearpart_fs_sin_2
+    # yearpart_fs_sin_3_train = train_df.yearpart_fs_sin_3
+    # yearpart_fs_cos_1_train = train_df.yearpart_fs_cos_1
+    # yearpart_fs_cos_2_train = train_df.yearpart_fs_cos_2
+    # yearpart_fs_cos_3_train = train_df.yearpart_fs_cos_3
     windspeed_train = train_df.windSpeed
 
     # Define test variables
@@ -465,12 +465,12 @@ def bayesian_model_comparison_test_3 (df, building_id):
     daypart_fs_cos_1_test = test_df.daypart_fs_cos_1
     daypart_fs_cos_2_test = test_df.daypart_fs_cos_2
     daypart_fs_cos_3_test = test_df.daypart_fs_cos_3
-    yearpart_fs_sin_1_test = test_df.yearpart_fs_sin_1
-    yearpart_fs_sin_2_test = test_df.yearpart_fs_sin_2
-    yearpart_fs_sin_3_test = test_df.yearpart_fs_sin_3
-    yearpart_fs_cos_1_test = test_df.yearpart_fs_cos_1
-    yearpart_fs_cos_2_test = test_df.yearpart_fs_cos_2
-    yearpart_fs_cos_3_test = test_df.yearpart_fs_cos_3
+    # yearpart_fs_sin_1_test = test_df.yearpart_fs_sin_1
+    # yearpart_fs_sin_2_test = test_df.yearpart_fs_sin_2
+    # yearpart_fs_sin_3_test = test_df.yearpart_fs_sin_3
+    # yearpart_fs_cos_1_test = test_df.yearpart_fs_cos_1
+    # yearpart_fs_cos_2_test = test_df.yearpart_fs_cos_2
+    # yearpart_fs_cos_3_test = test_df.yearpart_fs_cos_3
     windspeed_test = test_df.windSpeed
 
     # create coords for pymc3
@@ -492,13 +492,13 @@ def bayesian_model_comparison_test_3 (df, building_id):
         dp_fs_cos_2 = pm.Data("dp_fs_cos_2", daypart_fs_cos_2_train, dims="obs_id")
         dp_fs_cos_3 = pm.Data("dp_fs_cos_3", daypart_fs_cos_3_train, dims="obs_id")
 
-        yp_fs_sin_1 = pm.Data("yp_fs_sin_1", yearpart_fs_sin_1_train, dims="obs_id")
-        yp_fs_sin_2 = pm.Data("yp_fs_sin_2", yearpart_fs_sin_2_train, dims="obs_id")
-        yp_fs_sin_3 = pm.Data("yp_fs_sin_3", yearpart_fs_sin_3_train, dims="obs_id")
-
-        yp_fs_cos_1 = pm.Data("yp_fs_cos_1", yearpart_fs_cos_1_train, dims="obs_id")
-        yp_fs_cos_2 = pm.Data("yp_fs_cos_2", yearpart_fs_cos_2_train, dims="obs_id")
-        yp_fs_cos_3 = pm.Data("yp_fs_cos_3", yearpart_fs_cos_3_train, dims="obs_id")
+        # yp_fs_sin_1 = pm.Data("yp_fs_sin_1", yearpart_fs_sin_1_train, dims="obs_id")
+        # yp_fs_sin_2 = pm.Data("yp_fs_sin_2", yearpart_fs_sin_2_train, dims="obs_id")
+        # yp_fs_sin_3 = pm.Data("yp_fs_sin_3", yearpart_fs_sin_3_train, dims="obs_id")
+        #
+        # yp_fs_cos_1 = pm.Data("yp_fs_cos_1", yearpart_fs_cos_1_train, dims="obs_id")
+        # yp_fs_cos_2 = pm.Data("yp_fs_cos_2", yearpart_fs_cos_2_train, dims="obs_id")
+        # yp_fs_cos_3 = pm.Data("yp_fs_cos_3", yearpart_fs_cos_3_train, dims="obs_id")
 
         outdoor_temp = pm.Data("outdoor_temp", outdoor_temp_train, dims="obs_id")
         windspeed = pm.Data("windspeed", windspeed_train, dims = "obs_id")
@@ -520,13 +520,13 @@ def bayesian_model_comparison_test_3 (df, building_id):
         bcd2 = pm.Normal("bcd2",  mu = 0, sigma = 1, dims=("profile_cluster"))
         bcd3 = pm.Normal("bcd3",  mu = 0, sigma = 1, dims=("profile_cluster"))
 
-        bsy1 = pm.Normal("bsy1", mu=0, sigma=1, dims=("profile_cluster"))
-        bsy2 = pm.Normal("bsy2", mu=0, sigma=1, dims=("profile_cluster"))
-        bsy3 = pm.Normal("bsy3", mu=0, sigma=1, dims=("profile_cluster"))
-
-        bcy1 = pm.Normal("bcy1", mu=0, sigma=1, dims=("profile_cluster"))
-        bcy2 = pm.Normal("bcy2", mu=0, sigma=1, dims=("profile_cluster"))
-        bcy3 = pm.Normal("bcy3", mu=0, sigma=1, dims=("profile_cluster"))
+        # bsy1 = pm.Normal("bsy1", mu=0, sigma=1, dims=("profile_cluster"))
+        # bsy2 = pm.Normal("bsy2", mu=0, sigma=1, dims=("profile_cluster"))
+        # bsy3 = pm.Normal("bsy3", mu=0, sigma=1, dims=("profile_cluster"))
+        #
+        # bcy1 = pm.Normal("bcy1", mu=0, sigma=1, dims=("profile_cluster"))
+        # bcy2 = pm.Normal("bcy2", mu=0, sigma=1, dims=("profile_cluster"))
+        # bcy3 = pm.Normal("bcy3", mu=0, sigma=1, dims=("profile_cluster"))
 
         # Balance temperatures
         tbal_h = pm.Uniform("tbal_h", lower = 8, upper = 30)
@@ -541,10 +541,6 @@ def bayesian_model_comparison_test_3 (df, building_id):
              bsd2[profile_cluster_idx] * dp_fs_sin_2 + bsd3[profile_cluster_idx] * dp_fs_sin_3 + \
              bcd1[profile_cluster_idx] * dp_fs_cos_1 + bcd2[profile_cluster_idx] * dp_fs_cos_2 + \
              bcd3[profile_cluster_idx] * dp_fs_cos_3 + \
-             bsy1[profile_cluster_idx] * yp_fs_sin_1 + \
-             bsy2[profile_cluster_idx] * yp_fs_sin_2 + bsy3[profile_cluster_idx] * yp_fs_sin_3 + \
-             bcy1[profile_cluster_idx] * yp_fs_cos_1 + bcy2[profile_cluster_idx] * yp_fs_cos_2 + \
-             bcy3[profile_cluster_idx] * yp_fs_cos_3 + \
              btc[daypart] * (outdoor_temp - tbal_c) * ((outdoor_temp - tbal_c) > 0) * (
                      dep_c[profile_cluster_idx] > 0.5) + \
              bth[daypart] * (tbal_h - outdoor_temp) * ((tbal_h - outdoor_temp) > 0) * (
@@ -574,12 +570,12 @@ def bayesian_model_comparison_test_3 (df, building_id):
                      "dp_fs_cos_1": daypart_fs_cos_1_test,
                      "dp_fs_cos_2": daypart_fs_cos_2_test,
                      "dp_fs_cos_3": daypart_fs_cos_3_test,
-                     "yp_fs_sin_1": yearpart_fs_sin_1_test,
-                     "yp_fs_sin_2": yearpart_fs_sin_2_test,
-                     "yp_fs_sin_3": yearpart_fs_sin_3_test,
-                     "yp_fs_cos_1": yearpart_fs_cos_1_test,
-                     "yp_fs_cos_2": yearpart_fs_cos_2_test,
-                     "yp_fs_cos_3": yearpart_fs_cos_3_test,
+                     # "yp_fs_sin_1": yearpart_fs_sin_1_test,
+                     # "yp_fs_sin_2": yearpart_fs_sin_2_test,
+                     # "yp_fs_sin_3": yearpart_fs_sin_3_test,
+                     # "yp_fs_cos_1": yearpart_fs_cos_1_test,
+                     # "yp_fs_cos_2": yearpart_fs_cos_2_test,
+                     # "yp_fs_cos_3": yearpart_fs_cos_3_test,
                      "outdoor_temp": outdoor_temp_test,
                      "windspeed": windspeed_test
                      })
