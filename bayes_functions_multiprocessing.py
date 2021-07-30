@@ -13,7 +13,7 @@ from bokeh.plotting import figure, output_file, show
 
 def bayesian_model_comparison_test_1 (df, building_id):
     #df = pd.read_csv("/root/benedetto/results/buildings/Crow_education_Keisha_preprocess.csv")
-    #df = pd.read_csv("/Users/benedetto/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Fox_education_Ollie_preprocess.csv")
+    #df = pd.read_csv("/Users/benedetto/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Rat_lodging_Marguerite_preprocess.csv")
     # Preprocess
     df["log_v"] = log_electricity = np.log(df["total_electricity"]).values
 
@@ -362,6 +362,13 @@ def bayesian_model_comparison_test_2 (df, building_id):
 
     # Calculate predictions and HDI
 
+    # Bokeh plots to compare NUTS and ADVI
+    p1 = figure(plot_width=800, plot_height=400, x_axis_type='datetime')
+    p1.line(test_df['t'], model_2_predictions, color="navy", alpha=0.8)
+    p1.line(test_df['t'], test_df['total_electricity'], color="orange", alpha=0.6)
+    p1.varea(x=test_df['t'], y1=model_2_lower_bound, y2=model_2_higher_bound, color='gray', alpha=0.2)
+    show(p1)
+
     model_2_predictions = np.exp(model_2_posterior['y'].mean(0))
     hdi_data = az.hdi(model_2_posterior_hdi)
     model_2_lower_bound = np.array(np.exp(hdi_data.to_array().sel(hdi='lower'))).flatten()
@@ -445,6 +452,7 @@ def bayesian_model_comparison_test_3 (df, building_id):
     yearpart_fs_cos_1_train = train_df.yearpart_fs_cos_1
     yearpart_fs_cos_2_train = train_df.yearpart_fs_cos_2
     yearpart_fs_cos_3_train = train_df.yearpart_fs_cos_3
+    windspeed_train = train_df.windSpeed
 
     # Define test variables
     clusters_test = test_df.s
@@ -463,6 +471,7 @@ def bayesian_model_comparison_test_3 (df, building_id):
     yearpart_fs_cos_1_test = test_df.yearpart_fs_cos_1
     yearpart_fs_cos_2_test = test_df.yearpart_fs_cos_2
     yearpart_fs_cos_3_test = test_df.yearpart_fs_cos_3
+    windspeed_test = test_df.windSpeed
 
     # create coords for pymc3
     coords = {"obs_id": np.arange(total_electricity_train.size)}
@@ -492,11 +501,12 @@ def bayesian_model_comparison_test_3 (df, building_id):
         yp_fs_cos_3 = pm.Data("yp_fs_cos_3", yearpart_fs_cos_3_train, dims="obs_id")
 
         outdoor_temp = pm.Data("outdoor_temp", outdoor_temp_train, dims="obs_id")
-
+        windspeed = pm.Data("windspeed", windspeed_train, dims = "obs_id")
         # Temperature coefficients:
 
         btc = pm.HalfNormal("btc", sigma = 1, dims="daypart")
         bth = pm.HalfNormal("bth", sigma = 1, dims="daypart")
+        bws = pm.HalfNormal("bws", sigma = 1, dims = "daypart")
 
         # Intercept
         a_cluster = pm.Normal("a_cluster", mu = 0, sigma = 1, dims=("profile_cluster"))
@@ -538,7 +548,7 @@ def bayesian_model_comparison_test_3 (df, building_id):
              btc[daypart] * (outdoor_temp - tbal_c) * ((outdoor_temp - tbal_c) > 0) * (
                      dep_c[profile_cluster_idx] > 0.5) + \
              bth[daypart] * (tbal_h - outdoor_temp) * ((tbal_h - outdoor_temp) > 0) * (
-                     dep_h[profile_cluster_idx] > 0.5)
+                     dep_h[profile_cluster_idx] > 0.5) + bws[daypart] * windspeed
 
         # Model error:
         sigma = pm.Exponential("sigma", 1.0)
@@ -570,7 +580,8 @@ def bayesian_model_comparison_test_3 (df, building_id):
                      "yp_fs_cos_1": yearpart_fs_cos_1_test,
                      "yp_fs_cos_2": yearpart_fs_cos_2_test,
                      "yp_fs_cos_3": yearpart_fs_cos_3_test,
-                     "outdoor_temp": outdoor_temp_test
+                     "outdoor_temp": outdoor_temp_test,
+                     "windspeed": windspeed_test
                      })
 
         model_3_posterior_hdi = pm.sample_posterior_predictive(model_3_trace, keep_size=True)
@@ -629,7 +640,8 @@ def bayesian_model_comparison_test_3 (df, building_id):
     mod_3_data = {'t': test_df['t'],
                'prediction': model_3_predictions,
                'lower_bound': model_3_lower_bound,
-               'higher_bound': model_3_higher_bound}
+               'higher_bound': model_3_higher_bound,
+               'total_electricity':test_df['total_electricity']}
 
     mod_3_results = pd.DataFrame(data=mod_3_data)
     mod_3_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_mod_3.csv", index=False)
@@ -637,6 +649,7 @@ def bayesian_model_comparison_test_3 (df, building_id):
     export_data = {'mod_3_cvrmse': [model_3_cvrmse],
                    'mod_3_adjusted_coverage': [model_3_adjusted_coverage],
                    'mod_3_nmbe': [model_3_nmbe],
+                   'mod_3_coverage': [model_3_coverage],
                    'id': building_id}
 
     export_df = pd.DataFrame(data=export_data)
@@ -2900,14 +2913,14 @@ def multiprocessing_bayesian_comparison(df):
 
     # Try to read preprocessed file, otherwise run preprocessing
     try:
-        df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + building_id + "_preprocess.csv")
+        df_preprocessed = pd.read_csv("/root/benedetto/results/buildings_windspeed/" + building_id + "_preprocess.csv")
         print(building_id + ' preprocessed data was retrieved succesfully')
     except Exception as e:
         print(e)
         print('Running preprocessing for ' + building_id)
         subprocess.run(["Rscript", "ashrae_preprocess_server.R", building_id, building_id])
         try:
-            df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + building_id + "_preprocess.csv")
+            df_preprocessed = pd.read_csv("/root/benedetto/results/buildings_windspeed/" + building_id + "_preprocess.csv")
         except Exception as e:
             print(e)
             print("Preprocessing failed for " + building_id + '. Skipping to next building.')
@@ -2924,7 +2937,7 @@ def multiprocessing_bayesian_comparison(df):
             print('Results for ' + building_id + ' are already calculated. Skipping to next building')
         else:
             try:
-                model_results = bayesian_model_comparison_test_4(df_preprocessed, building_id)
+                model_results = bayesian_model_comparison_test_3(df_preprocessed, building_id)
                 res = pd.read_csv("/root/benedetto/results/bayes_results.csv")
                 final_export = res.append(model_results)
                 final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
@@ -2934,7 +2947,7 @@ def multiprocessing_bayesian_comparison(df):
                 print('Modeling error for ' + building_id + '. Skipping to the next building')
     else:
         try:
-            model_results = bayesian_model_comparison_test_4(df_preprocessed, building_id)
+            model_results = bayesian_model_comparison_test_3(df_preprocessed, building_id)
             final_export = model_results
             final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
         except Exception as e:
