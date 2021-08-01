@@ -195,9 +195,10 @@ def bayesian_model_comparison_test_1 (df, building_id):
 
     # Print df
     mod_1_data = {'t': test_df['t'],
-               'prediction': model_1_predictions,
-               'lower_bound': model_1_lower_bound,
-               'higher_bound': model_1_higher_bound}
+                  'total_electricity': test_df['total_electricity'],
+                  'prediction': model_1_predictions,
+                  'lower_bound': model_1_lower_bound,
+                  'higher_bound': model_1_higher_bound}
 
     mod_1_results = pd.DataFrame(data=mod_1_data)
     mod_1_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_mod_1.csv", index=False)
@@ -401,9 +402,11 @@ def bayesian_model_comparison_test_2 (df, building_id):
 
     # Print df
     mod_2_data = {'t': test_df['t'],
-               'prediction': model_2_predictions,
-               'lower_bound': model_2_lower_bound,
-               'higher_bound': model_2_higher_bound}
+                  'total_electricity': test_df['total_electricity'],
+                  'prediction': model_2_predictions,
+                  'lower_bound': model_2_lower_bound,
+                  'higher_bound': model_2_higher_bound
+                   }
 
     mod_2_results = pd.DataFrame(data=mod_2_data)
     mod_2_results.to_csv("/root/benedetto/results/predictions/" + building_id + "_mod_2.csv", index=False)
@@ -2910,14 +2913,14 @@ def multiprocessing_bayesian_comparison(df):
 
     # Try to read preprocessed file, otherwise run preprocessing
     try:
-        df_preprocessed = pd.read_csv("/root/benedetto/results/buildings_windspeed/" + building_id + "_preprocess.csv")
+        df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + building_id + "_preprocess.csv")
         print(building_id + ' preprocessed data was retrieved succesfully')
     except Exception as e:
         print(e)
         print('Running preprocessing for ' + building_id)
         subprocess.run(["Rscript", "ashrae_preprocess_server.R", building_id, building_id])
         try:
-            df_preprocessed = pd.read_csv("/root/benedetto/results/buildings_windspeed/" + building_id + "_preprocess.csv")
+            df_preprocessed = pd.read_csv("/root/benedetto/results/buildings/" + building_id + "_preprocess.csv")
         except Exception as e:
             print(e)
             print("Preprocessing failed for " + building_id + '. Skipping to next building.')
@@ -2934,7 +2937,7 @@ def multiprocessing_bayesian_comparison(df):
             print('Results for ' + building_id + ' are already calculated. Skipping to next building')
         else:
             try:
-                model_results = bayesian_model_comparison_test_3(df_preprocessed, building_id)
+                model_results = bayesian_model_comparison_test_1(df_preprocessed, building_id)
                 res = pd.read_csv("/root/benedetto/results/bayes_results.csv")
                 final_export = res.append(model_results)
                 final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
@@ -2944,7 +2947,7 @@ def multiprocessing_bayesian_comparison(df):
                 print('Modeling error for ' + building_id + '. Skipping to the next building')
     else:
         try:
-            model_results = bayesian_model_comparison_test_3(df_preprocessed, building_id)
+            model_results = bayesian_model_comparison_test_1(df_preprocessed, building_id)
             final_export = model_results
             final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
         except Exception as e:
