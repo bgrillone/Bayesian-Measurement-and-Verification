@@ -115,7 +115,7 @@ def bayesian_model_comparison_test_1 (df, building_id):
                      dep_h[profile_cluster_idx] > 0.5)
 
         # Model error:
-        sigma = pm.Uniform("sigma", lower = -5, upper = 5)
+        sigma = pm.Exponential("sigma", 1.0)
 
         # Likelihood
         y = pm.Normal("y", mu, sigma=sigma, observed=log_electricity_train, dims="obs_id")
