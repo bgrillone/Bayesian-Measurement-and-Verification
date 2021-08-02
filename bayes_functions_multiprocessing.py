@@ -365,11 +365,11 @@ def bayesian_model_comparison_test_2 (df, building_id):
     # Calculate predictions and HDI
 
     # Bokeh plots to compare NUTS and ADVI
-    p1 = figure(plot_width=800, plot_height=400, x_axis_type='datetime')
-    p1.line(test_df['t'], model_2_predictions, color="navy", alpha=0.8)
-    p1.line(test_df['t'], test_df['total_electricity'], color="orange", alpha=0.6)
-    p1.varea(x=test_df['t'], y1=model_2_lower_bound, y2=model_2_higher_bound, color='gray', alpha=0.2)
-    show(p1)
+    # p1 = figure(plot_width=800, plot_height=400, x_axis_type='datetime')
+    # p1.line(test_df['t'], model_2_predictions, color="navy", alpha=0.8)
+    # p1.line(test_df['t'], test_df['total_electricity'], color="orange", alpha=0.6)
+    # p1.varea(x=test_df['t'], y1=model_2_lower_bound, y2=model_2_higher_bound, color='gray', alpha=0.2)
+    # show(p1)
 
     model_2_predictions = np.exp(model_2_posterior['y'].mean(0))
     hdi_data = az.hdi(model_2_posterior_hdi)
@@ -657,7 +657,7 @@ def bayesian_model_comparison_test_3 (df, building_id):
 
 def bayesian_model_comparison_test_4 (df, building_id):
     #df = pd.read_csv("/root/benedetto/results/buildings/Crow_education_Keisha_preprocess.csv")
-    #df = pd.read_csv("/Users/benedetto/Nextcloud/PhD-Benedetto/Bayesian/data/debugging/Fox_education_Ollie_preprocess.csv")
+    #df = pd.read_csv("/Users/benedetto/Nextcloud/PhD-Benedetto/Bayesian/data/buildings/Rat_health_Gaye_preprocess.csv")
     # Preprocess
     df["log_v"] = log_electricity = np.log(df["total_electricity"]).values
 
@@ -736,8 +736,8 @@ def bayesian_model_comparison_test_4 (df, building_id):
         bcd3 = pm.Normal("bcd3",  mu = 0, sigma = 1, dims=("profile_cluster"))
 
         # Balance temperatures
-        tbal_h = pm.Uniform("tbal_h", lower = 8, upper = 30)
-        tbal_c = pm.Uniform("tbal_c", lower = 8, upper = 30)
+        tbal_h = pm.Uniform("tbal_h", lower = -5, upper = 35)
+        tbal_c = pm.Uniform("tbal_c", lower = -5, upper = 35)
 
         # Dependence
         dep_h = pm.Uniform("dep_h", lower=0, upper=1, dims="profile_cluster")
@@ -2937,7 +2937,7 @@ def multiprocessing_bayesian_comparison(df):
             print('Results for ' + building_id + ' are already calculated. Skipping to next building')
         else:
             try:
-                model_results = bayesian_model_comparison_test_1(df_preprocessed, building_id)
+                model_results = bayesian_model_comparison_test_2(df_preprocessed, building_id)
                 res = pd.read_csv("/root/benedetto/results/bayes_results.csv")
                 final_export = res.append(model_results)
                 final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
@@ -2947,7 +2947,7 @@ def multiprocessing_bayesian_comparison(df):
                 print('Modeling error for ' + building_id + '. Skipping to the next building')
     else:
         try:
-            model_results = bayesian_model_comparison_test_1(df_preprocessed, building_id)
+            model_results = bayesian_model_comparison_test_2(df_preprocessed, building_id)
             final_export = model_results
             final_export.to_csv("/root/benedetto/results/bayes_results.csv", index=False)
         except Exception as e:
